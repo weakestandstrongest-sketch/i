@@ -126,45 +126,16 @@
 
   <!-- YOU -->
   <section id="view-you" class="view" data-view="you">
-    <div class="scroll">
-      <header class="page-head">
+    <div class="you">
+      <header class="you-head">
         <p class="eyebrow">Your Sound</p>
         <h2 class="page-title">Taste,<br /><span class="grad-text">decoded.</span></h2>
       </header>
-
-      <div class="stat-grid">
-        <div class="stat-card grad-a"><span class="stat-num" id="statPlays">0</span><span class="stat-cap">記録した再生</span></div>
-        <div class="stat-card grad-b"><span class="stat-num" id="statArtists">0</span><span class="stat-cap">アーティスト</span></div>
-        <div class="stat-card grad-c"><span class="stat-num" id="statBpm">—</span><span class="stat-cap">平均 BPM</span></div>
-        <div class="stat-card grad-d"><span class="stat-num" id="statBright">—</span><span class="stat-cap">明るさ</span></div>
-      </div>
-
-      <div class="block glass">
-        <h4 class="block-title">サウンドの傾向</h4>
-        <p class="persona" id="persona">記録が増えると、あなたの音の好みが見えてきます。</p>
-      </div>
-
-      <div class="block glass">
-        <h4 class="block-title">トップアーティスト</h4>
-        <ol class="bars" id="topArtists"></ol>
-      </div>
-
-      <div class="block glass">
-        <h4 class="block-title">ジャンル</h4>
-        <div class="genre-cloud" id="genres"></div>
-      </div>
-
-      <div class="block glass">
-        <h4 class="block-title">よく聴く時間帯</h4>
-        <div class="hours" id="hours"></div>
-      </div>
-
-      <div class="block glass">
-        <div class="block-head">
-          <h4 class="block-title">履歴</h4>
-          <button class="link-btn" id="addManualBtn">＋ 手動で追加</button>
-        </div>
-        <ul class="history" id="history"></ul>
+      <div class="wheel" id="wheel">
+        <div class="wheel-glow" id="wheelGlow"></div>
+        <div class="dial" id="dial"></div>
+        <div class="needle" id="needle"></div>
+        <div class="focus-label" id="focusLabel"><b id="flTitle"></b><span id="flSub"></span></div>
       </div>
     </div>
   </section>
@@ -231,6 +202,15 @@
     </div>
     <ul class="search-results" id="manualResults"></ul>
     <button class="btn-glass block-btn" id="closeManual">閉じる</button>
+  </div>
+
+  <div class="ysheet" id="ysheet" role="dialog" aria-modal="true" aria-labelledby="ysTitle">
+    <div class="ysheet-bg" id="ysheetBg"></div>
+    <div class="ys-top">
+      <button class="ys-btn" id="ysClose" aria-label="閉じる">✕</button>
+      <button class="ys-btn" id="ysDone" aria-label="完了">✓</button>
+    </div>
+    <div class="ysheet-body" id="ysheetBody"></div>
   </div>
 
   <div class="toast" id="toast" hidden></div>

@@ -408,53 +408,294 @@ function tickCountdown() {
 tickCountdown();
 setInterval(tickCountdown, 30000);
 
-/* ---------------- You ---------------- */
-function animateNumber(el, to, suffix = '') {
-  if (to == null) { el.textContent = '—'; return; }
-  const from = 0, start = performance.now(), dur = 900;
-  const step = (now) => {
-    const k = Math.min(1, (now - start) / dur);
-    const e = 1 - Math.pow(1 - k, 3);
-    el.innerHTML = Math.round(from + (to - from) * e) + (suffix ? `<small>${suffix}</small>` : '');
-    if (k < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+/* ---------------- You: fan of cards on a half circle ---------------- */
+const YG = {
+  a: 'radial-gradient(120% 90% at 20% 15%, #ffd200 0%, #ff8a00 30%, #ff2d7a 70%, #5a0b3a 100%)',
+  b: 'radial-gradient(120% 90% at 80% 10%, #c08bff 0%, #8b3dff 35%, #3d1bff 70%, #0b0a3a 100%)',
+  c: 'radial-gradient(120% 90% at 30% 85%, #e4ff6a 0%, #9dff3d 30%, #1fd1a0 65%, #063a35 100%)',
+  d: 'radial-gradient(120% 90% at 60% 20%, #a6f2ff 0%, #2bd9ff 30%, #2f7bff 65%, #0a1a4a 100%)',
+  e: 'radial-gradient(120% 90% at 50% 0%, #ffb3d1 0%, #ff2d7a 35%, #8b3dff 75%, #1a0630 100%)',
+  f: 'radial-gradient(120% 90% at 15% 50%, #ffe08a 0%, #ff8a00 35%, #c2185b 75%, #2a0510 100%)',
+  g: 'radial-gradient(120% 90% at 70% 80%, #8affd6 0%, #1fd1a0 30%, #2f7bff 70%, #07122e 100%)',
+  h: 'radial-gradient(120% 90% at 40% 20%, #ff9de2 0%, #b06bff 35%, #2bd9ff 80%, #061830 100%)',
+  i: 'radial-gradient(120% 90% at 50% 90%, #ffd0a8 0%, #ff6a3d 35%, #6b2bd9 80%, #12062a 100%)',
+};
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const BPM_BUCKETS = [[0, 90, '〜89'], [90, 110, '90–109'], [110, 130, '110–129'], [130, 150, '130–149'], [150, 999, '150+']];
+const pct = (v, total) => (total ? Math.round((v / total) * 100) : 0);
+
+function youStats(s) {
+  const p = buildProfile(s);
+  const plays = s.plays;
+  const weekday = [1, 2, 3, 4, 5, 6, 0].map((d) => [WEEKDAYS[d], plays.filter((x) => new Date(x.at).getDay() === d).length]);
+  const bpms = plays.map((x) => x.features?.bpm).filter(Boolean);
+  const bpmDist = BPM_BUCKETS.map(([lo, hi, l]) => [l, bpms.filter((b) => b >= lo && b < hi).length]);
+  const daypart = (h) => (h >= 5 && h < 11 ? 0 : h >= 11 && h < 18 ? 1 : 2);
+  const bright = [[], [], []];
+  plays.forEach((x) => x.features?.brightness != null && bright[daypart(new Date(x.at).getHours())].push(x.features.brightness));
+  const brightBy = bright.map((a) => (a.length ? Math.round((a.reduce((m, n) => m + n, 0) / a.length) * 100) : null));
+  const gTotal = p.genres.reduce((m, [, w]) => m + w, 0);
+  const genres = p.genres.slice(0, 6).map(([g, w]) => [g, pct(w, gTotal)]);
+  const peak = p.hours.indexOf(Math.max(...p.hours));
+  const night = [20, 21, 22, 23, 0, 1, 2, 3].reduce((m, h) => m + p.hours[h], 0);
+  const morning = [5, 6, 7, 8, 9, 10].reduce((m, h) => m + p.hours[h], 0);
+  const weeks = Object.values(s.weeks);
+  const suggested = weeks.reduce((m, w) => m + w.tracks.length, 0);
+  // Persona = time of day × tempo.
+  const when = plays.length && night / plays.length > 0.4 ? 'Night' : plays.length && morning / plays.length > 0.35 ? 'Morning' : 'All-day';
+  const how = !p.bpm ? 'Listener' : p.bpm >= 128 ? 'Raver' : p.bpm >= 100 ? 'Groover' : 'Drifter';
+  const top5 = p.artists.slice(0, 5).reduce((m, a) => m + a.count, 0);
+  return { p, weekday, bpmDist, bpmN: bpms.length, brightBy, genres, peak, night, suggested, weeks: weeks.length, persona: `${when} ${how}`, when, how, top5 };
 }
+
+const ySpark = (vals) => (vals.some((v) => v > 0)
+  ? `<div class="yc-spark">${vals.map((v) => `<i style="height:${Math.max(8, (v / Math.max(...vals)) * 100)}%"></i>`).join('')}</div>` : '');
+const yRows = (rows, unit) => {
+  const m = Math.max(1, ...rows.map((r) => r[1]));
+  return `<div class="rows">${rows.map(([n, v], i) => `
+    <div class="row"><span class="rk">${i + 1}</span><span class="nm">${esc(n)}</span><span class="ct">${v}${unit}</span>
+    <span class="tr"><i style="width:${(v / m) * 100}%;animation-delay:${i * 70}ms"></i></span></div>`).join('')}</div>`;
+};
+const yCols = (rows) => {
+  const m = Math.max(1, ...rows.map((r) => r[1]));
+  const peak = rows.findIndex((r) => r[1] === m);
+  return `<div class="vbars">${rows.map(([n, v], i) => `
+    <div class="vbar ${i === peak ? '' : 'dim'}" title="${n}: ${v}">${i === peak ? `<em>${v}</em>` : ''}<i style="height:${(v / m) * 100}%;animation-delay:${i * 50}ms"></i><span>${n}</span></div>`).join('')}</div>`;
+};
+const EMPTY = '<p class="ys-lede">まだ記録がありません。Live で曲を記録するか、設定からデモデータを読み込んでください。</p>';
+
+function buildYouCards(s) {
+  const st = youStats(s);
+  const { p } = st;
+  const has = p.plays > 0;
+  const top = p.artists[0];
+  const bestDay = st.weekday.reduce((a, b) => (b[1] > a[1] ? b : a), ['', 0]);
+  const brightN = p.brightness != null ? Math.round(p.brightness * 100) : null;
+  const persona = describePersona(p);
+  return [
+    { g: YG.a, glow: '#ff2d7a', label: '記録した再生', sub: 'Plays', num: has ? p.plays : '—', spark: st.weekday.map((d) => d[1]), cap: '',
+      desc: 'マイク・手動追加・♡ から記録した曲の数',
+      detail: () => (has ? `<p class="ys-lede">いちばん多いのは<b>${bestDay[0]}曜日</b>で、${bestDay[1]}回です。</p>
+        <div class="ys-block"><h3>曜日別の再生数</h3>${yCols(st.weekday)}</div>` : EMPTY) },
+    { g: YG.b, glow: '#8b3dff', label: 'トップアーティスト', sub: 'Top Artist', word: top ? esc(top.name) : '—', cap: top ? `${top.count}回 · ${p.artists.length}組中` : '',
+      desc: `よく聴いた ${p.artists.length} 組のうち上位`,
+      detail: () => (top ? `<p class="ys-lede">上位5組で全体の<b>${pct(st.top5, p.plays)}%</b>。${pct(st.top5, p.plays) > 45 ? '好みがはっきりしているタイプです。' : 'いろいろなアーティストを幅広く聴いています。'}</p>
+        <div class="ys-block"><h3>再生回数</h3>${yRows(p.artists.slice(0, 8).map((a) => [a.name, a.count]), '回')}</div>` : EMPTY) },
+    { g: YG.c, glow: '#1fd1a0', label: '平均テンポ', sub: 'BPM', num: p.bpm ?? '—', spark: st.bpmDist.map((b) => b[1]), cap: '',
+      desc: 'マイクで拾った曲のビートから推定',
+      detail: () => (st.bpmN ? `<p class="ys-lede">いちばん多いのは<b>${st.bpmDist.reduce((a, b) => (b[1] > a[1] ? b : a))[0]} BPM</b>。${p.bpm >= 128 ? '速いビートで体を動かしたいタイプです。' : p.bpm >= 100 ? '踊れるけれど速すぎない、グルーヴ重視のテンポです。' : 'ゆったりしたテンポが落ち着くタイプです。'}</p>
+        <div class="ys-block"><h3>テンポの分布（曲数）</h3>${yCols(st.bpmDist)}</div>` : '<p class="ys-lede">テンポはマイクで記録した曲から計算します。Live でマイクをオンにして記録すると表示されます。</p>') },
+    { g: YG.d, glow: '#2bd9ff', label: '音の明るさ', sub: 'Brightness', num: brightN ?? '—', unit: brightN != null ? '%' : '', cap: brightN == null ? '' : brightN > 55 ? 'きらびやか' : brightN > 35 ? 'バランス型' : '深く温かい',
+      desc: '高音域の多さ。低いほど深く温かい音色',
+      detail: () => (brightN != null ? `<p class="ys-lede">${brightN > 55 ? '高音のきらめきが多い、明るい音が好みです。' : brightN > 35 ? '低音の厚みと高音のきらめきのバランスが取れています。' : '低音が豊かで温かい音色が好みです。'}</p>
+        <div class="ys-block"><h3>明るさ</h3><div class="gauge"><b style="left:${brightN}%"></b></div><div class="gauge-ends"><span>深い・温かい</span><span>きらびやか</span></div></div>
+        <div class="ys-block"><h3>時間帯ごとの平均</h3><div class="kv">${['朝', '昼', '夜'].map((l, i) => `<div><b>${st.brightBy[i] ?? '—'}${st.brightBy[i] != null ? '%' : ''}</b><span>${l}</span></div>`).join('')}</div></div>`
+        : '<p class="ys-lede">明るさはマイクで記録した曲から計算します。</p>') },
+    { g: YG.e, glow: '#ff2d7a', label: 'メインのジャンル', sub: 'Genre', word: st.genres[0] ? esc(st.genres[0][0]) : '—', cap: st.genres[0] ? `全体の${st.genres[0][1]}%` : '',
+      desc: '記録した曲のジャンル構成（最近の再生ほど重く数えます）',
+      detail: () => (st.genres.length ? `<p class="ys-lede"><b>${esc(st.genres[0][0])}</b>を軸に${st.genres[1] ? `、${esc(st.genres[1][0])}も多く聴いています。` : '聴いています。'}</p>
+        <div class="ys-block"><h3>割合</h3>${yRows(st.genres, '%')}</div>` : '<p class="ys-lede">ジャンルは曲を記録したときに取得します。</p>') },
+    { g: YG.f, glow: '#ff8a00', label: 'よく聴く時間', sub: 'Peak Hour', num: has ? st.peak : '—', unit: has ? '時' : '', spark: has ? p.hours.slice(16).concat(p.hours.slice(0, 2)) : [], cap: '',
+      desc: '時間帯ごとの再生数',
+      detail: () => (has ? `<p class="ys-lede">再生の<b>${pct(st.night, p.plays)}%</b>が20時〜4時。${pct(st.night, p.plays) > 40 ? '夜にじっくり聴くタイプです。' : '一日のいろいろな時間に聴いています。'}</p>
+        <div class="ys-block"><h3>時間帯別の再生数</h3>
+          <div class="vbars hours24">${p.hours.map((v, i) => `<div class="vbar ${i === st.peak ? '' : 'dim'}" title="${i}時: ${v}"><i style="height:${(v / Math.max(1, ...p.hours)) * 100}%;animation-delay:${i * 18}ms"></i></div>`).join('')}</div>
+          <div class="axis"><span>0時</span><span>6時</span><span>12時</span><span>18時</span><span>23時</span></div></div>` : EMPTY) },
+    { g: YG.g, glow: '#2f7bff', label: 'あなたのタイプ', sub: 'Persona', word: has ? st.persona.replace(' ', '<br>') : '—', cap: 'テンポ × 時間帯',
+      desc: '記録全体から見えたリスナー像',
+      detail: () => (persona ? `<p class="ys-lede">${persona}</p>
+        <div class="ys-block"><h3>キーワード</h3><div class="tags">${[{ Night: '夜型', Morning: '朝型', 'All-day': '一日中' }[st.when], p.bpm ? `${p.bpm} BPM` : null, ...st.genres.slice(0, 2).map((g) => esc(g[0])), brightN != null ? (brightN > 55 ? '明るい音色' : brightN > 35 ? 'バランス型の音色' : '温かい音色') : null].filter(Boolean).map((t) => `<span>${t}</span>`).join('')}</div></div>`
+        : '<p class="ys-lede">3曲以上記録すると、あなたのリスナー像が見えてきます。</p>') },
+    { g: YG.h, glow: '#b06bff', label: '見つけた曲', sub: 'Discoveries', num: s.liked.length, cap: `提案${st.suggested}曲中 ♡`,
+      desc: 'これまでの毎週の提案から',
+      detail: () => `<p class="ys-lede">${st.suggested ? `${st.weeks}週分で ${st.suggested} 曲を提案し、<b>${s.liked.length} 曲</b>を好きに追加しました。` : 'Discover で毎週の提案が届くと、ここに記録されます。'}</p>
+        <div class="ys-block"><h3>これまで</h3><div class="kv"><div><b>${st.suggested}</b><span>提案</span></div><div><b>${s.liked.length}</b><span>好き</span></div><div><b>${s.heard.length}</b><span>聴いたことあり</span></div></div></div>` },
+    { g: YG.i, glow: '#ff6a3d', label: '履歴', sub: 'History', num: s.plays.length, cap: s.plays[0] ? `最新: ${esc(s.plays[0].title)}` : '曲を手動で追加',
+      desc: '記録した曲の一覧。× で削除できます',
+      detail: () => `<div class="ys-block"><div class="ys-block-head"><h3>最近の記録</h3><button class="link-btn" data-act="add">＋ 手動で追加</button></div>
+        <ul class="history">${s.plays.slice(0, 100).map((pl) => `
+          <li><div class="h-cover" style="background-image:url('${esc(pl.cover)}')"></div>
+          <div class="h-text"><div class="h-title">${esc(pl.title)}</div>
+          <div class="h-sub">${esc(pl.artist)} · ${fmtWhen(pl.at)}${pl.features?.bpm ? ` · ${pl.features.bpm} BPM` : ''}</div></div>
+          <button class="h-del" data-id="${pl.id}" aria-label="削除">×</button></li>`).join('') || '<p class="muted">まだ記録がありません</p>'}</ul></div>` },
+  ];
+}
+
+const wheel = $('#wheel');
+const Y_STEP = 19;   // degrees between cards on the arc
+let yCards = [], yEls = [];
+let yR = 520, yTop = 18;
+const Y_CARD_H = 252;
+let yPos = 0, yTarget = 0, yVel = 0, yDragging = false, yStartX = 0, yStartPos = 0, yLastX = 0, yMoved = false;
+let yIntro = 0, yLoop = false, yShown = -1;
+let ysOpen = false, ysIdx = -1;
+const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 function renderYou() {
-  const s = store.get();
-  const p = buildProfile(s);
-  animateNumber($('#statPlays'), p.plays);
-  animateNumber($('#statArtists'), p.artists.length);
-  animateNumber($('#statBpm'), p.bpm);
-  animateNumber($('#statBright'), p.brightness != null ? Math.round(p.brightness * 100) : null, '%');
-
-  const persona = describePersona(p);
-  $('#persona').innerHTML = persona || '記録が増えると、あなたの音の好みが見えてきます。';
-
-  const top = p.artists.slice(0, 6);
-  const max = top[0]?.weight || 1;
-  $('#topArtists').innerHTML = top.length ? top.map((a, i) => `
-    <li><span class="rank">${i + 1}</span><span class="bar-name">${esc(a.name)}</span><span class="count">${a.count}回</span>
-    <span class="bar-track"><span class="bar-fill" style="width:${(a.weight / max) * 100}%;display:block;animation-delay:${i * 80}ms"></span></span></li>`).join('')
-    : '<p class="muted">まだデータがありません</p>';
-
-  $('#genres').innerHTML = p.genres.length ? p.genres.slice(0, 14).map(([g], i) =>
-    `<span class="genre ${i < 2 ? 'hot' : i < 5 ? 'warm' : ''}">${esc(g)}</span>`).join('')
-    : '<p class="muted">ジャンル情報は曲の記録時に取得されます</p>';
-
-  const hmax = Math.max(1, ...p.hours);
-  $('#hours').innerHTML = p.hours.map((v, i) =>
-    `<div class="h" style="height:${Math.max(3, (v / hmax) * 100)}%;background-position:${(i / 23) * 100}% 0;opacity:${v ? 0.95 : 0.2}" title="${i}時 ${v}回"></div>`).join('');
-  if (!$('.hours-axis')) $('#hours').insertAdjacentHTML('afterend', '<div class="hours-axis"><span>0時</span><span>6時</span><span>12時</span><span>18時</span><span>24時</span></div>');
-
-  $('#history').innerHTML = s.plays.slice(0, 60).map((pl) => `
-    <li><div class="h-cover" style="background-image:url('${esc(pl.cover)}')"></div>
-      <div class="h-text"><div class="h-title">${esc(pl.title)}</div>
-      <div class="h-sub">${esc(pl.artist)} · ${fmtWhen(pl.at)}${pl.features?.bpm ? ` · ${pl.features.bpm} BPM` : ''}</div></div>
-      <button class="h-del" data-id="${pl.id}" aria-label="削除">×</button></li>`).join('') || '<p class="muted">まだ記録がありません</p>';
-  $('#history').querySelectorAll('.h-del').forEach((b) => b.addEventListener('click', () => { store.removePlay(b.dataset.id); renderYou(); }));
+  yCards = buildYouCards(store.get());
+  yEls.forEach((el) => el.remove());
+  yEls = yCards.map((c, i) => {
+    const el = document.createElement('button');
+    el.className = 'ycard';
+    el.style.background = c.g;
+    el.setAttribute('aria-label', `${c.label}を開く`);
+    const big = c.word != null
+      ? `<div class="yc-num word">${c.word}</div>`
+      : `<div class="yc-num">${c.num}${c.unit ? `<sup>${c.unit}</sup>` : ''}</div>`;
+    const foot = c.spark && c.spark.some((v) => v > 0) ? ySpark(c.spark) : `<div class="yc-cap">${c.cap || ''}</div>`;
+    el.innerHTML = `<div class="yc-in"><div class="yc-label">${c.label}<small>${c.sub}</small></div>${big}${foot}</div>`;
+    el.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openYouCard(i, true); } });
+    wheel.appendChild(el);
+    return el;
+  });
+  yShown = -1;
+  measureWheel();
+  if (!yLoop) { yIntro = performance.now(); yLoop = true; requestAnimationFrame(yTick); }
 }
+
+function measureWheel() {
+  const w = wheel.clientWidth, h = wheel.clientHeight;
+  if (!w) return;
+  yR = Math.max(420, Math.min(700, w * 1.25));
+  yTop = Math.max(14, h * 0.1);
+  yEls.forEach((el) => (el.style.top = yTop + 'px'));
+  const pivotY = yTop + Y_CARD_H / 2 + yR;
+  // A ring of ticks concentric with the fan, peeking up under the cards.
+  const dialR = yR - Y_CARD_H / 2 - 34;
+  const size = dialR * 2;
+  const dial = $('#dial');
+  Object.assign(dial.style, { width: size + 'px', height: size + 'px', marginLeft: -dialR + 'px', top: (pivotY - dialR) + 'px' });
+  let ticks = '';
+  for (let k = 0; k < 360; k += 2) {
+    const major = k % 10 === 0;
+    const a = (k - 90) * Math.PI / 180;
+    const r1 = dialR - (major ? 16 : 9);
+    ticks += `<line x1="${dialR + Math.cos(a) * r1}" y1="${dialR + Math.sin(a) * r1}" x2="${dialR + Math.cos(a) * dialR}" y2="${dialR + Math.sin(a) * dialR}" stroke="rgba(255,255,255,${major ? 0.55 : 0.22})" stroke-width="${major ? 2 : 1.2}" stroke-linecap="round"/>`;
+  }
+  dial.innerHTML = `<svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}"><circle cx="${dialR}" cy="${dialR}" r="${dialR - 30}" fill="rgba(255,255,255,.04)"/>${ticks}</svg>`;
+  $('#needle').style.top = (pivotY - dialR - 4) + 'px';
+  $('#focusLabel').style.top = Math.min(pivotY - dialR + 34, h - 54) + 'px';
+}
+new ResizeObserver(measureWheel).observe(wheel);
+
+const yWrapOff = (i, pos) => { const n = yEls.length; return ((i - pos + n / 2) % n + n) % n - n / 2; };
+
+function yTick(now) {
+  if (currentView !== 'you' && !ysOpen) { yLoop = false; return; }
+  if (!yDragging) {
+    const prev = yPos;
+    yPos += (yTarget - yPos) * (reducedMotion ? 1 : 0.12);
+    yVel = yPos - prev;
+  }
+  const ei = reducedMotion ? 1 : 1 - Math.pow(1 - Math.min(1, (now - yIntro) / 1300), 3);
+  yEls.forEach((el, i) => {
+    const off = yWrapOff(i, yPos);
+    const deg = off * Y_STEP * ei;   // intro: the fan opens from a stack
+    const a = deg * Math.PI / 180;
+    const near = Math.max(0, 1 - Math.abs(off));
+    const vis = 1 - Math.min(1, Math.max(0, (Math.abs(off) - 3) / 0.8));
+    el.style.transform = `translate3d(${Math.sin(a) * yR}px, ${yR - Math.cos(a) * yR - near * 14}px, ${-Math.abs(off) * 40}px) rotate(${deg}deg) rotateY(${-off * 14}deg) scale(${0.86 + near * 0.16})`;
+    el.style.opacity = vis;
+    el.style.visibility = vis <= 0 || (ysOpen && i === ysIdx) ? 'hidden' : 'visible';
+    el.style.zIndex = String(100 - Math.round(Math.abs(off) * 10));
+    el.style.filter = `brightness(${0.62 + near * 0.38}) saturate(${0.85 + near * 0.25})`;
+    el.tabIndex = Math.round(off) === 0 ? 0 : -1;
+  });
+  const svg = $('#dial svg');
+  if (svg) svg.style.transform = `rotate(${-yPos * Y_STEP}deg)`;
+  const n = yEls.length;
+  const f = ((Math.round(yPos) % n) + n) % n;
+  if (f !== yShown && yCards[f]) {
+    yShown = f;
+    $('#flTitle').textContent = yCards[f].label;
+    $('#flSub').textContent = 'タップして開く';
+    $('#wheelGlow').style.background = yCards[f].glow;
+  }
+  requestAnimationFrame(yTick);
+}
+
+wheel.addEventListener('pointerdown', (e) => {
+  if (ysOpen) return;
+  yDragging = true; yMoved = false;
+  yStartX = yLastX = e.clientX; yStartPos = yPos;
+  wheel.setPointerCapture(e.pointerId);
+});
+wheel.addEventListener('pointermove', (e) => {
+  if (!yDragging) return;
+  if (Math.abs(e.clientX - yStartX) > 6) yMoved = true;
+  yPos = yStartPos - (e.clientX - yStartX) / 120;
+  yVel = -(e.clientX - yLastX) / 120;
+  yLastX = e.clientX;
+});
+wheel.addEventListener('pointerup', (e) => {
+  if (!yDragging) return;
+  yDragging = false;
+  if (yMoved) { yTarget = Math.round(yPos + yVel * 6); return; }
+  // Tap: the centre card opens, a side card turns to the front.
+  const hit = document.elementsFromPoint(e.clientX, e.clientY).find((n) => n.classList?.contains('ycard'));
+  const i = yEls.indexOf(hit);
+  if (i < 0) return;
+  const off = yWrapOff(i, yPos);
+  if (Math.abs(off) < 0.5) openYouCard(i);
+  else yTarget = Math.round(yPos + off);
+});
+addEventListener('keydown', (e) => {
+  if (ysOpen) { if (e.key === 'Escape') closeYouCard(); return; }
+  if (currentView !== 'you') return;
+  if (e.key === 'ArrowRight') yTarget = Math.round(yTarget) + 1;
+  if (e.key === 'ArrowLeft') yTarget = Math.round(yTarget) - 1;
+});
+
+/* Expand: grow from the card's rectangle to full screen, then reveal the detail. */
+const ysheet = $('#ysheet');
+const ysClip = (r) => `inset(${r.top}px ${innerWidth - r.right}px ${innerHeight - r.bottom}px ${r.left}px round 26px)`;
+
+function fillYouSheet(i) {
+  const c = yCards[i];
+  const big = c.word != null
+    ? `<div class="ys-big word">${c.word}</div>`
+    : `<div class="ys-big">${c.num}${c.unit ? `<sup>${c.unit}</sup>` : ''}</div>`;
+  $('#ysheetBody').innerHTML = `<p class="ys-kicker">${c.sub}</p><h2 class="ys-title" id="ysTitle">${c.label}</h2>${big}<p class="ys-lede" style="margin-bottom:8px">${c.desc}</p>${c.detail()}`;
+}
+
+function openYouCard(i, viaKey = false) {
+  ysIdx = i; ysOpen = true;
+  const rect = yEls[i].getBoundingClientRect();
+  $('#ysheetBg').style.background = yCards[i].g;
+  fillYouSheet(i);
+  $('#ysheetBody').scrollTop = 0;
+  ysheet.classList.add('open');
+  const anim = ysheet.animate([{ clipPath: ysClip(rect) }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }],
+    { duration: reducedMotion ? 1 : 620, easing: 'cubic-bezier(.2,.9,.2,1)', fill: 'forwards' });
+  anim.onfinish = () => { ysheet.classList.add('ready'); if (viaKey) $('#ysClose').focus(); };
+}
+
+function closeYouCard() {
+  if (!ysOpen) return;
+  ysheet.classList.remove('ready');
+  const el = yEls[ysIdx];
+  el.style.visibility = 'visible';
+  const rect = el.getBoundingClientRect();
+  const anim = ysheet.animate([{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: ysClip(rect) }],
+    { duration: reducedMotion ? 1 : 480, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards', delay: reducedMotion ? 0 : 80 });
+  anim.onfinish = () => {
+    ysheet.classList.remove('open');
+    ysOpen = false;
+    renderYou();   // pick up edits made inside the sheet (deletes, manual adds)
+  };
+}
+$('#ysClose').addEventListener('click', closeYouCard);
+$('#ysDone').addEventListener('click', closeYouCard);
+$('#ysheetBody').addEventListener('click', (e) => {
+  const del = e.target.closest('.h-del');
+  if (del) {
+    store.removePlay(del.dataset.id);
+    yCards = buildYouCards(store.get());
+    fillYouSheet(ysIdx);
+    return;
+  }
+  if (e.target.closest('[data-act="add"]')) { openSheet('#manualSheet'); $('#manualQuery').focus(); }
+});
 
 function fmtWhen(ts) {
   const d = new Date(ts);
@@ -553,8 +794,10 @@ $('#demoBtn').addEventListener('click', async () => {
 });
 
 /* Manual add */
-$('#addManualBtn').addEventListener('click', () => { openSheet('#manualSheet'); $('#manualQuery').focus(); });
-$('#closeManual').addEventListener('click', () => { closeSheets(); renderYou(); });
+$('#closeManual').addEventListener('click', () => {
+  closeSheets();
+  if (ysOpen) { yCards = buildYouCards(store.get()); fillYouSheet(ysIdx); } else renderYou();
+});
 let searchTimer;
 $('#manualQuery').addEventListener('input', (e) => {
   clearTimeout(searchTimer);
