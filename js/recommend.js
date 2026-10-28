@@ -3,6 +3,7 @@ import { deezer, fromDeezerTrack, pool } from './deezer.js';
 import { trackKey } from './store.js';
 
 const HALF_LIFE_DAYS = 21;
+const YT_LIKE_WEIGHT = 1.5;   // a YouTube like counts a bit more than one recent play
 
 export function buildProfile(state) {
   const now = Date.now();
@@ -29,8 +30,22 @@ export function buildProfile(state) {
     if (f.brightness != null) { brSum += f.brightness; brN++; }
   }
 
+  // Likes carry no listening time, so they shape taste but not hours or counts.
+  for (const l of state.ytLikes || []) {
+    const key = (l.artist || '').toLowerCase();
+    if (key) {
+      const a = artists.get(key) || { name: l.artist, id: l.artistId || null, weight: 0, count: 0 };
+      a.weight += YT_LIKE_WEIGHT;
+      a.likes = (a.likes || 0) + 1;
+      if (!a.id && l.artistId) a.id = l.artistId;
+      artists.set(key, a);
+    }
+    for (const g of l.genres || []) genres.set(g, (genres.get(g) || 0) + YT_LIKE_WEIGHT);
+  }
+
   return {
     plays: state.plays.length,
+    likes: (state.ytLikes || []).length,
     artists: [...artists.values()].sort((a, b) => b.weight - a.weight),
     genres: [...genres.entries()].sort((a, b) => b[1] - a[1]),
     hours,
@@ -41,7 +56,7 @@ export function buildProfile(state) {
 }
 
 export function describePersona(profile) {
-  if (profile.plays < 3) return null;
+  if (profile.plays + profile.likes < 3) return null;
   const parts = [];
   const top = profile.artists[0];
   const g = profile.genres[0]?.[0];
@@ -64,8 +79,9 @@ export function describePersona(profile) {
 // related artists on Deezer. Falls back to the global chart with no history.
 export async function generateWeekly(state, { onProgress } = {}) {
   const profile = buildProfile(state);
-  const heardKeys = new Set(state.plays.map((p) => trackKey(p.title, p.artist)));
-  const heardIds = new Set([...state.plays.map((p) => p.deezerId).filter(Boolean), ...state.heard]);
+  const known = [...state.plays, ...(state.ytLikes || [])];
+  const heardKeys = new Set(known.map((p) => trackKey(p.title, p.artist)));
+  const heardIds = new Set([...known.map((p) => p.deezerId).filter(Boolean), ...state.heard]);
   const pastRecIds = new Set(Object.values(state.weeks).flatMap((w) => w.tracks.map((t) => t.deezerId)));
   const knownArtists = new Set(profile.artists.map((a) => a.name.toLowerCase()));
   const isFresh = (t) => !heardIds.has(t.deezerId) && !pastRecIds.has(t.deezerId) && !heardKeys.has(trackKey(t.title, t.artist));

@@ -5,6 +5,7 @@ import { recordClip, identify } from './recognizer.js';
 import { deezer, fromDeezerTrack, pool } from './deezer.js';
 import { buildProfile, describePersona, generateWeekly } from './recommend.js';
 import { fetchRecent, enrich } from './lastfm.js';
+import { preloadGoogle, hasToken, signIn, fetchLikes, enrichLikes } from './youtube.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -177,7 +178,7 @@ async function ensureWeek(force = false) {
   try {
     const stateForGen = force ? { ...s, weeks: Object.fromEntries(Object.entries(s.weeks).filter(([k]) => k !== wk)) } : s;
     const tracks = await generateWeekly(stateForGen);
-    store.update((st) => (st.weeks[wk] = { generatedAt: Date.now(), basedOn: st.plays.length, tracks }));
+    store.update((st) => (st.weeks[wk] = { generatedAt: Date.now(), basedOn: st.plays.length + st.ytLikes.length, tracks }));
     return store.get().weeks[wk];
   } catch (e) {
     toast('提案の生成に失敗しました。通信状況を確認してください');
@@ -420,6 +421,7 @@ const YG = {
   g: 'radial-gradient(120% 90% at 70% 80%, #8affd6 0%, #1fd1a0 30%, #2f7bff 70%, #07122e 100%)',
   h: 'radial-gradient(120% 90% at 40% 20%, #ff9de2 0%, #b06bff 35%, #2bd9ff 80%, #061830 100%)',
   i: 'radial-gradient(120% 90% at 50% 90%, #ffd0a8 0%, #ff6a3d 35%, #6b2bd9 80%, #12062a 100%)',
+  j: 'radial-gradient(120% 90% at 30% 20%, #ffb0b0 0%, #ff1f3d 35%, #8b0a3a 75%, #1a0410 100%)',
 };
 const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
 const BPM_BUCKETS = [[0, 90, '〜89'], [90, 110, '90–109'], [110, 130, '110–129'], [130, 150, '130–149'], [150, 999, '150+']];
@@ -454,7 +456,7 @@ const ySpark = (vals) => (vals.some((v) => v > 0)
 const yRows = (rows, unit) => {
   const m = Math.max(1, ...rows.map((r) => r[1]));
   return `<div class="rows">${rows.map(([n, v], i) => `
-    <div class="row"><span class="rk">${i + 1}</span><span class="nm">${esc(n)}</span><span class="ct">${v}${unit}</span>
+    <div class="row"><span class="rk">${i + 1}</span><span class="nm">${esc(n)}</span><span class="ct">${rows[i][2] ?? `${v}${unit}`}</span>
     <span class="tr"><i style="width:${(v / m) * 100}%;animation-delay:${i * 70}ms"></i></span></div>`).join('')}</div>`;
 };
 const yCols = (rows) => {
@@ -478,10 +480,10 @@ function buildYouCards(s) {
       desc: 'マイク・手動追加・♡ から記録した曲の数',
       detail: () => (has ? `<p class="ys-lede">いちばん多いのは<b>${bestDay[0]}曜日</b>で、${bestDay[1]}回です。</p>
         <div class="ys-block"><h3>曜日別の再生数</h3>${yCols(st.weekday)}</div>` : EMPTY) },
-    { g: YG.b, glow: '#8b3dff', label: 'トップアーティスト', sub: 'Top Artist', word: top ? esc(top.name) : '—', cap: top ? `${top.count}回 · ${p.artists.length}組中` : '',
+    { g: YG.b, glow: '#8b3dff', label: 'トップアーティスト', sub: 'Top Artist', word: top ? esc(top.name) : '—', cap: top ? `${top.count}回${top.likes ? ` · ♥${top.likes}` : ''} · ${p.artists.length}組中` : '',
       desc: `よく聴いた ${p.artists.length} 組のうち上位`,
       detail: () => (top ? `<p class="ys-lede">上位5組で全体の<b>${pct(st.top5, p.plays)}%</b>。${pct(st.top5, p.plays) > 45 ? '好みがはっきりしているタイプです。' : 'いろいろなアーティストを幅広く聴いています。'}</p>
-        <div class="ys-block"><h3>再生回数</h3>${yRows(p.artists.slice(0, 8).map((a) => [a.name, a.count]), '回')}</div>` : EMPTY) },
+        <div class="ys-block"><h3>再生回数${p.likes ? ' と高評価' : ''}</h3>${yRows(p.artists.slice(0, 8).map((a) => [a.name, a.count + (a.likes || 0), `${a.count}回${a.likes ? ` · ♥${a.likes}` : ''}`]), '')}</div>` : EMPTY) },
     { g: YG.c, glow: '#1fd1a0', label: '平均テンポ', sub: 'BPM', num: p.bpm ?? '—', spark: st.bpmDist.map((b) => b[1]), cap: '',
       desc: 'マイクで拾った曲のビートから推定',
       detail: () => (st.bpmN ? `<p class="ys-lede">いちばん多いのは<b>${st.bpmDist.reduce((a, b) => (b[1] > a[1] ? b : a))[0]} BPM</b>。${p.bpm >= 128 ? '速いビートで体を動かしたいタイプです。' : p.bpm >= 100 ? '踊れるけれど速すぎない、グルーヴ重視のテンポです。' : 'ゆったりしたテンポが落ち着くタイプです。'}</p>
@@ -511,6 +513,13 @@ function buildYouCards(s) {
       desc: 'これまでの毎週の提案から',
       detail: () => `<p class="ys-lede">${st.suggested ? `${st.weeks}週分で ${st.suggested} 曲を提案し、<b>${s.liked.length} 曲</b>を好きに追加しました。` : 'Discover で毎週の提案が届くと、ここに記録されます。'}</p>
         <div class="ys-block"><h3>これまで</h3><div class="kv"><div><b>${st.suggested}</b><span>提案</span></div><div><b>${s.liked.length}</b><span>好き</span></div><div><b>${s.heard.length}</b><span>聴いたことあり</span></div></div></div>` },
+    { g: YG.j, glow: '#ff1f3d', label: '高評価した曲', sub: 'YouTube Likes', num: s.ytLikes.length, cap: s.settings.ytSyncedAt ? `同期: ${fmtWhen(s.settings.ytSyncedAt)}` : 'YouTube Music と連携',
+      desc: 'YouTube Music で 👍 した曲。好みの分析とおすすめに使います',
+      detail: () => `<div class="ys-block"><div class="ys-block-head"><h3>${s.ytLikes.length ? `${s.ytLikes.length} 曲` : 'まだありません'}</h3><button class="link-btn" data-act="yt">YouTube から同期</button></div>
+        <ul class="history">${s.ytLikes.slice(0, 150).map((l) => `
+          <li><div class="h-cover" style="background-image:url('${esc(l.cover)}')"></div>
+          <div class="h-text"><div class="h-title">${esc(l.title)}</div><div class="h-sub">${esc(l.artist)}${l.genres?.length ? ` · ${esc(l.genres[0])}` : ''}</div></div></li>`).join('')
+          || '<p class="muted">設定で Google のクライアント ID を入れて同期すると、ここに表示されます。</p>'}</ul></div>` },
     { g: YG.i, glow: '#ff6a3d', label: '履歴', sub: 'History', num: s.plays.length, cap: s.plays[0] ? `最新: ${esc(s.plays[0].title)}` : '曲を手動で追加',
       desc: '記録した曲の一覧。× で削除できます',
       detail: () => `<div class="ys-block"><div class="ys-block-head"><h3>最近の記録</h3><button class="link-btn" data-act="add">＋ 手動で追加</button></div>
@@ -696,6 +705,7 @@ $('#ysheetBody').addEventListener('click', (e) => {
     return;
   }
   if (e.target.closest('[data-act="add"]')) { openSheet('#manualSheet'); $('#manualQuery').focus(); }
+  if (e.target.closest('[data-act="yt"]')) syncYouTube({ manual: true });
 });
 
 function fmtWhen(ts) {
@@ -724,7 +734,10 @@ $('#openSettings').addEventListener('click', () => {
   $('#autoInterval').value = String(st.autoInterval);
   $('#lastfmUser').value = st.lastfmUser;
   $('#lastfmKey').value = st.lastfmKey;
+  $('#googleClientId').value = st.googleClientId;
   showLastfmStatus();
+  showYtStatus();
+  preloadGoogle();
   openSheet('#settingsSheet');
 });
 $('#closeSettings').addEventListener('click', () => {
@@ -733,6 +746,7 @@ $('#closeSettings').addEventListener('click', () => {
     s.settings.autoInterval = +$('#autoInterval').value;
   });
   saveLastfmFields();
+  store.update((s) => (s.settings.googleClientId = $('#googleClientId').value.trim()));
   if (autoTimer) startAuto();
   closeSheets();
   syncLastfm();
@@ -753,8 +767,8 @@ $('#importInput').addEventListener('change', async (e) => {
   try {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data.plays)) throw new Error();
-    const { auddToken, lastfmUser, lastfmKey } = store.get().settings;
-    store.replace({ ...data, settings: { ...data.settings, auddToken, lastfmUser, lastfmKey } });
+    const { auddToken, lastfmUser, lastfmKey, googleClientId } = store.get().settings;
+    store.replace({ ...data, settings: { ...data.settings, auddToken, lastfmUser, lastfmKey, googleClientId } });
     toast(`${data.plays.length} 件の記録を読み込みました`);
   } catch { toast('読み込めないファイルです'); }
   e.target.value = '';
@@ -762,9 +776,9 @@ $('#importInput').addEventListener('change', async (e) => {
 $('#clearBtn').addEventListener('click', () => {
   if (!confirm('すべての記録と提案を消去しますか？')) return;
   // Keep the Last.fm cursor so cleared plays don't come straight back on the next sync.
-  const { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt } = store.get().settings;
+  const { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt, googleClientId } = store.get().settings;
   store.clear();
-  store.update((s) => Object.assign(s.settings, { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt }));
+  store.update((s) => Object.assign(s.settings, { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt, googleClientId }));
   toast('消去しました');
 });
 
@@ -888,9 +902,56 @@ async function syncLastfm({ manual = false } = {}) {
 function refreshThinWeek() {
   const s = store.get();
   const w = s.weeks[weekKey()];
-  if (!w || (w.basedOn ?? 0) >= 10 || s.plays.length < 10) return;
+  if (!w || (w.basedOn ?? 0) >= 10 || s.plays.length + s.ytLikes.length < 10) return;
   ensureWeek(true).then(() => { if (currentView === 'discover') renderDiscover(); });
 }
+
+/* ---------------- YouTube Music likes ---------------- */
+let ytBusy = false;
+
+function showYtStatus(msg) {
+  const s = store.get();
+  const el = $('#ytStatus');
+  if (!el) return;
+  el.textContent = msg || (s.settings.ytSyncedAt ? `最終同期: ${fmtWhen(s.settings.ytSyncedAt)} · 高評価 ${s.ytLikes.length} 曲` : '');
+}
+
+// Must be called straight from a tap: the Google sign-in popup needs the user gesture.
+function syncYouTube({ manual = false } = {}) {
+  const clientId = ($('#googleClientId')?.value || store.get().settings.googleClientId || '').trim();
+  if (!clientId) { if (manual) { toast('設定で Google のクライアント ID を入力してください'); openSheet('#settingsSheet'); } return Promise.resolve(); }
+  if (ytBusy) return Promise.resolve();
+  if (!hasToken() && !manual) return Promise.resolve();   // no silent popups
+  store.update((s) => (s.settings.googleClientId = clientId));
+  ytBusy = true;
+  showYtStatus('ログインしています…');
+  const ready = hasToken() ? Promise.resolve() : signIn(clientId);
+  return ready
+    .then(async () => {
+      showYtStatus('高評価を読み込んでいます…');
+      const likes = await fetchLikes();
+      const known = new Map(store.get().ytLikes.map((l) => [l.videoId, l]));
+      const fresh = likes.filter((l) => !known.has(l.videoId));
+      showYtStatus(`曲を照合しています…（${fresh.length} 曲）`);
+      await enrichLikes(fresh);
+      const next = likes.map((l) => known.get(l.videoId) || l);
+      const removed = known.size - (next.length - fresh.length);
+      store.update((s) => {
+        s.ytLikes = next;   // unliked songs drop out
+        s.settings.ytSyncedAt = Date.now();
+      });
+      showYtStatus();
+      toast(fresh.length ? `YouTube Music の高評価を ${fresh.length} 曲取り込みました` : removed > 0 ? '高評価の変更を反映しました' : '新しい高評価はありませんでした');
+      if (fresh.length) refreshThinWeek();
+      if (ysOpen) { yCards = buildYouCards(store.get()); fillYouSheet(ysIdx); }
+      else if (currentView === 'you') renderYou();
+    })
+    .catch((e) => { showYtStatus(e.message); toast(e.message, 4000); })
+    .finally(() => { ytBusy = false; });
+}
+$('#ytSyncBtn').addEventListener('click', () => syncYouTube({ manual: true }));
+if (store.get().settings.googleClientId) preloadGoogle();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncYouTube(); });
 
 syncLastfm();
 setInterval(syncLastfm, 5 * 60 * 1000);

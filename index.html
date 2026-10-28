@@ -171,6 +171,14 @@
     </div>
 
     <div class="field">
+      <label for="googleClientId">YouTube Music の高評価（Google 連携）</label>
+      <input id="googleClientId" type="text" placeholder="Google の OAuth クライアント ID" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <button class="btn-glass" id="ytSyncBtn" style="margin-top:10px">Google でログインして同期</button>
+      <p class="hint" id="ytStatus"></p>
+      <p class="hint">YouTube Music で 👍 した曲を取り込み、好みの分析とおすすめに使います。クライアント ID の作り方は <a href="https://github.com/weakestandstrongest-sketch/i/blob/claude/resonance-visualizer/README.md#youtube-music-の高評価を取り込む" target="_blank" rel="noopener">README</a> にあります。ログインは 1 時間ほど有効で、その間に開くと自動で同期します。</p>
+    </div>
+
+    <div class="field">
       <label for="lastfmUser">イヤホン再生の記録（Last.fm 連携）</label>
       <input id="lastfmUser" type="text" placeholder="Last.fm のユーザー名" autocomplete="off" autocapitalize="off" spellcheck="false" />
       <input id="lastfmKey" type="password" placeholder="Last.fm の API キー" autocomplete="off" style="margin-top:8px" />

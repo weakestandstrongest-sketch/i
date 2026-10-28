@@ -7,7 +7,8 @@ const empty = () => ({
   weeks: {},          // weekKey -> { generatedAt, tracks[] }
   liked: [],          // deezer track ids
   heard: [],          // deezer track ids marked "already heard" from recommendations
-  settings: { auddToken: '', autoListen: false, autoInterval: 45, lastfmUser: '', lastfmKey: '', lastfmCursor: 0, lastfmSyncedAt: 0 },
+  ytLikes: [],        // { videoId, title, artist, artistId, cover, genres[], deezerId } liked on YouTube Music
+  settings: { auddToken: '', autoListen: false, autoInterval: 45, lastfmUser: '', lastfmKey: '', lastfmCursor: 0, lastfmSyncedAt: 0, googleClientId: '', ytSyncedAt: 0 },
 });
 
 let state = load();

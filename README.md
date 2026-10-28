@@ -31,6 +31,21 @@ python3 -m http.server 8080
 
 iPhone で使うには HTTPS で公開します。GitHub Pages なら、リポジトリの Settings → Pages でこのブランチのルートを選ぶだけです。Safari で開いて「ホーム画面に追加」するとアプリのように起動します。
 
+### YouTube Music の高評価を取り込む
+
+YouTube Music で 👍 した曲を YouTube Data API で読み込み、好みの分析とおすすめに使います（`js/youtube.js`）。高評価済みの曲はおすすめから外します。再生履歴は Google が API で提供していないため、取り込めるのは高評価だけです。
+
+最初に一度だけ、Google Cloud で自分用のクライアント ID を作ります（無料）。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) を開き、新しいプロジェクトを作る（名前は何でもよい）
+2. 「API とサービス」→「ライブラリ」で **YouTube Data API v3** を検索して「有効にする」
+3. 「Google Auth Platform」（OAuth 同意画面）→「開始」で、アプリ名とメールアドレスを入れ、対象を **外部** にして作成する
+4. 「対象」（Audience）→「テストユーザー」に、自分の Google アカウントのメールアドレスを追加する
+5. 「クライアント」→「クライアントを作成」→ 種類は **ウェブ アプリケーション**、「承認済みの JavaScript 生成元」に `https://weakestandstrongest-sketch.github.io` を追加して作成する
+6. 表示された **クライアント ID**（`….apps.googleusercontent.com`）をコピーし、アプリの ⚙ に貼って「Google でログインして同期」を押す
+
+ログインすると「Google はこのアプリを確認していません」と出ます。自分で作った非公開のアプリなので、「続行」を押して YouTube の閲覧を許可してください。ログインは約 1 時間有効で、その間にアプリを開き直すと自動で同期します。それ以降は、⚙ か You の「高評価した曲」カードから同期ボタンを押します。ポップアップがブロックされた場合は、Brave なら Shields をこのサイトだけオフにしてください。
+
 ### イヤホンで聴く場合（Last.fm 連携）
 
 マイクはイヤホンの音を拾えないので、再生履歴を [Last.fm](https://www.last.fm/) 経由で取り込みます。
@@ -63,6 +78,7 @@ js/audio.js         マイク入力と音の特徴抽出
 js/visualizer.js    Three.js の 3D 空間とシェーダー
 js/recognizer.js    録音と AudD での曲認識
 js/lastfm.js        Last.fm からの再生履歴の取り込み
+js/youtube.js       YouTube Music の高評価の取り込み
 js/recommend.js     好みの分析と毎週の提案
 js/deezer.js        Deezer API
 js/store.js         保存と週の計算
