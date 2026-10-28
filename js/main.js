@@ -4,6 +4,7 @@ import { store, trackKey, weekKey, nextWeekStart } from './store.js';
 import { recordClip, identify } from './recognizer.js';
 import { deezer, fromDeezerTrack, pool } from './deezer.js';
 import { buildProfile, describePersona, generateWeekly } from './recommend.js';
+import { fetchRecent, enrich } from './lastfm.js';
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -176,7 +177,7 @@ async function ensureWeek(force = false) {
   try {
     const stateForGen = force ? { ...s, weeks: Object.fromEntries(Object.entries(s.weeks).filter(([k]) => k !== wk)) } : s;
     const tracks = await generateWeekly(stateForGen);
-    store.update((st) => (st.weeks[wk] = { generatedAt: Date.now(), tracks }));
+    store.update((st) => (st.weeks[wk] = { generatedAt: Date.now(), basedOn: st.plays.length, tracks }));
     return store.get().weeks[wk];
   } catch (e) {
     toast('提案の生成に失敗しました。通信状況を確認してください');
@@ -721,6 +722,9 @@ $('#openSettings').addEventListener('click', () => {
   const st = store.get().settings;
   $('#auddToken').value = st.auddToken;
   $('#autoInterval').value = String(st.autoInterval);
+  $('#lastfmUser').value = st.lastfmUser;
+  $('#lastfmKey').value = st.lastfmKey;
+  showLastfmStatus();
   openSheet('#settingsSheet');
 });
 $('#closeSettings').addEventListener('click', () => {
@@ -728,12 +732,15 @@ $('#closeSettings').addEventListener('click', () => {
     s.settings.auddToken = $('#auddToken').value.trim();
     s.settings.autoInterval = +$('#autoInterval').value;
   });
+  saveLastfmFields();
   if (autoTimer) startAuto();
   closeSheets();
+  syncLastfm();
 });
+$('#lastfmSyncBtn').addEventListener('click', () => { saveLastfmFields(); syncLastfm({ manual: true }); });
 
 $('#exportBtn').addEventListener('click', () => {
-  const data = { ...store.get(), settings: { ...store.get().settings, auddToken: '' } };
+  const data = { ...store.get(), settings: { ...store.get().settings, auddToken: '', lastfmKey: '' } };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   const a = Object.assign(document.createElement('a'), { href: url, download: `resonance-${weekKey()}.json` });
   a.click();
@@ -746,17 +753,18 @@ $('#importInput').addEventListener('change', async (e) => {
   try {
     const data = JSON.parse(await file.text());
     if (!Array.isArray(data.plays)) throw new Error();
-    const token = store.get().settings.auddToken;
-    store.replace({ ...data, settings: { ...data.settings, auddToken: token } });
+    const { auddToken, lastfmUser, lastfmKey } = store.get().settings;
+    store.replace({ ...data, settings: { ...data.settings, auddToken, lastfmUser, lastfmKey } });
     toast(`${data.plays.length} 件の記録を読み込みました`);
   } catch { toast('読み込めないファイルです'); }
   e.target.value = '';
 });
 $('#clearBtn').addEventListener('click', () => {
   if (!confirm('すべての記録と提案を消去しますか？')) return;
-  const token = store.get().settings.auddToken;
+  // Keep the Last.fm cursor so cleared plays don't come straight back on the next sync.
+  const { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt } = store.get().settings;
   store.clear();
-  store.update((s) => (s.settings.auddToken = token));
+  store.update((s) => Object.assign(s.settings, { auddToken, lastfmUser, lastfmKey, lastfmCursor, lastfmSyncedAt }));
   toast('消去しました');
 });
 
@@ -819,6 +827,74 @@ $('#manualQuery').addEventListener('input', (e) => {
     } catch { $('#manualResults').innerHTML = '<p class="muted">検索できませんでした</p>'; }
   }, 350);
 });
+
+/* ---------------- Last.fm sync (earphone listening) ---------------- */
+let lastfmBusy = false;
+
+function saveLastfmFields() {
+  const user = $('#lastfmUser').value.trim();
+  const key = $('#lastfmKey').value.trim();
+  store.update((s) => {
+    // A different account starts over from the last 30 days.
+    if (user !== s.settings.lastfmUser) { s.settings.lastfmCursor = 0; s.settings.lastfmSyncedAt = 0; }
+    s.settings.lastfmUser = user;
+    s.settings.lastfmKey = key;
+  });
+}
+
+function showLastfmStatus(msg) {
+  const st = store.get().settings;
+  $('#lastfmStatus').textContent = msg
+    || (st.lastfmSyncedAt ? `最終同期: ${fmtWhen(st.lastfmSyncedAt)}（${st.lastfmUser}）` : st.lastfmUser ? 'まだ同期していません' : '');
+}
+
+async function syncLastfm({ manual = false } = {}) {
+  const { lastfmUser, lastfmKey, lastfmCursor } = store.get().settings;
+  if (!lastfmUser || !lastfmKey) { if (manual) toast('Last.fm のユーザー名と API キーを入力してください'); return; }
+  if (lastfmBusy) return;
+  lastfmBusy = true;
+  showLastfmStatus('同期しています…');
+  try {
+    const { plays, nowPlaying, latest } = await fetchRecent(lastfmUser, lastfmKey, lastfmCursor);
+    if (plays.length) await enrich(plays);
+    let added = 0;
+    store.update((s) => {
+      const seen = new Set(s.plays.filter((p) => p.source === 'lastfm').map((p) => p.at + trackKey(p.title, p.artist)));
+      plays.forEach((p) => {
+        if (seen.has(p.at + trackKey(p.title, p.artist))) return;
+        added++;
+        s.plays.push({ id: `lf-${p.at}-${Math.random().toString(36).slice(2, 7)}`, ...p });
+      });
+      s.plays.sort((a, b) => b.at - a.at);
+      s.settings.lastfmCursor = latest;
+      s.settings.lastfmSyncedAt = Date.now();
+    });
+    showLastfmStatus();
+    if (nowPlaying && engine.mode === 'idle') setNow(nowPlaying, 'Now Playing · Last.fm');
+    if (added) {
+      toast(`Last.fm から ${added} 曲を記録しました`);
+      if (currentView === 'you' && !ysOpen) renderYou();
+      refreshThinWeek();
+    } else if (manual) toast('新しい再生はありませんでした');
+  } catch (e) {
+    showLastfmStatus(e.message);
+    if (manual) toast(e.message);
+  } finally {
+    lastfmBusy = false;
+  }
+}
+
+// This week's picks were made from too few plays: redo them once there's enough history.
+function refreshThinWeek() {
+  const s = store.get();
+  const w = s.weeks[weekKey()];
+  if (!w || (w.basedOn ?? 0) >= 10 || s.plays.length < 10) return;
+  ensureWeek(true).then(() => { if (currentView === 'discover') renderDiscover(); });
+}
+
+syncLastfm();
+setInterval(syncLastfm, 5 * 60 * 1000);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncLastfm(); });
 
 /* Weekly auto-refresh: a new ISO week unlocks a new drop the next time the app is open. */
 setInterval(() => {

@@ -171,6 +171,15 @@
     </div>
 
     <div class="field">
+      <label for="lastfmUser">イヤホン再生の記録（Last.fm 連携）</label>
+      <input id="lastfmUser" type="text" placeholder="Last.fm のユーザー名" autocomplete="off" autocapitalize="off" spellcheck="false" />
+      <input id="lastfmKey" type="password" placeholder="Last.fm の API キー" autocomplete="off" style="margin-top:8px" />
+      <button class="btn-glass" id="lastfmSyncBtn" style="margin-top:10px">今すぐ同期</button>
+      <p class="hint" id="lastfmStatus"></p>
+      <p class="hint">YouTube Music などで聴いた曲を Last.fm 経由で取り込みます。Safari 拡張機能「<a href="https://apps.apple.com/app/web-scrobbler/id6449224218" target="_blank" rel="noopener">Web Scrobbler</a>」で再生を Last.fm に送り、<a href="https://www.last.fm/api/account/create" target="_blank" rel="noopener">last.fm/api</a> で無料の API キーを取得してください。アプリを開くたびと、開いている間は 5 分ごとに同期します。</p>
+    </div>
+
+    <div class="field">
       <label for="autoInterval">自動記録の間隔</label>
       <select id="autoInterval">
         <option value="45">45 秒</option>

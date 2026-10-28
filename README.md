@@ -31,13 +31,24 @@ python3 -m http.server 8080
 
 iPhone で使うには HTTPS で公開します。GitHub Pages なら、リポジトリの Settings → Pages でこのブランチのルートを選ぶだけです。Safari で開いて「ホーム画面に追加」するとアプリのように起動します。
 
+### イヤホンで聴く場合（Last.fm 連携）
+
+マイクはイヤホンの音を拾えないので、再生履歴を [Last.fm](https://www.last.fm/) 経由で取り込みます。
+
+1. Last.fm の無料アカウントを作る
+2. 再生を Last.fm に送る設定をする。YouTube Music をブラウザで聴くなら、拡張機能 [Web Scrobbler](https://apps.apple.com/app/web-scrobbler/id6449224218)（iPhone の Safari 対応）を入れて Last.fm にログインし、Safari の設定で music.youtube.com での動作を許可する
+3. [last.fm/api/account/create](https://www.last.fm/api/account/create) で API キーを無料で取得する
+4. アプリの ⚙ で Last.fm のユーザー名と API キーを入力し、「今すぐ同期」を押す
+
+初回は過去 30 日分を取り込みます。その後はアプリを開いたときと、開いている間は 5 分ごとに新しい再生を取り込みます（`js/lastfm.js`）。Last.fm の再生履歴は公開設定にしておく必要があります。
+
 ### 曲認識トークン
 
 右上の ⚙ から AudD の API トークンを入力します（[dashboard.audd.io](https://dashboard.audd.io/) で取得）。トークンなしでも、ビジュアライザー・手動での曲追加・デモデータ・提案はすべて動きます。
 
 ## 注意点
 
-- **他アプリの音声は直接取れません。** ブラウザが取得できるのはマイク入力だけなので、スピーカーから流れる音を拾います。イヤホン再生中は拾えません。
+- **他アプリの音声は直接取れません。** ブラウザが取得できるのはマイク入力だけなので、スピーカーから流れる音を拾います。イヤホン再生中の記録は Last.fm 連携を使ってください（ビジュアライザーはイヤホン再生には反応しません）。
 - **iPhone の Safari でマイクを有効にすると、他アプリの再生が一時停止・音量低下する場合があります**（iOS のオーディオセッションの仕様）。その場合は、別の端末やスピーカーで流した音を拾う使い方になります。
 - 「毎週」の提案は、その週に初めてアプリを開いたとき（または開いている間に週が変わったとき）に生成されます。サーバーがないため、プッシュ通知での配信はしていません。
 - 試聴音源・関連アーティストは Deezer の公開 API（JSONP）を使っています。
@@ -51,6 +62,7 @@ js/main.js          画面の制御
 js/audio.js         マイク入力と音の特徴抽出
 js/visualizer.js    Three.js の 3D 空間とシェーダー
 js/recognizer.js    録音と AudD での曲認識
+js/lastfm.js        Last.fm からの再生履歴の取り込み
 js/recommend.js     好みの分析と毎週の提案
 js/deezer.js        Deezer API
 js/store.js         保存と週の計算

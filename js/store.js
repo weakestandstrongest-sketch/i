@@ -7,7 +7,7 @@ const empty = () => ({
   weeks: {},          // weekKey -> { generatedAt, tracks[] }
   liked: [],          // deezer track ids
   heard: [],          // deezer track ids marked "already heard" from recommendations
-  settings: { auddToken: '', autoListen: false, autoInterval: 45 },
+  settings: { auddToken: '', autoListen: false, autoInterval: 45, lastfmUser: '', lastfmKey: '', lastfmCursor: 0, lastfmSyncedAt: 0 },
 });
 
 let state = load();
