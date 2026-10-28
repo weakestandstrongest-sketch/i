@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Resonance</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+</head>
+<body>
+  <canvas id="stage"></canvas>
+
+  <!-- Intro -->
+  <section id="intro" class="intro">
+    <div class="intro-glow"></div>
+    <div class="intro-inner">
+      <p class="eyebrow">Introducing</p>
+      <h1 class="hero-title"><span class="grad-text">Resonance.</span></h1>
+      <p class="hero-sub">音が、空間になる。<br />あなたの音楽が、次の一曲を連れてくる。</p>
+      <button id="introStart" class="btn-primary">はじめる</button>
+    </div>
+  </section>
+
+  <!-- LIVE -->
+  <section id="view-live" class="view active" data-view="live">
+    <header class="topbar">
+      <div class="brand"><span class="brand-dot"></span>Resonance</div>
+      <button class="icon-btn glass" id="openSettings" aria-label="設定">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </button>
+    </header>
+
+    <div class="live-metrics">
+      <div class="metric"><span class="metric-value" id="bpmValue">--</span><span class="metric-label">BPM</span></div>
+      <div class="metric"><span class="metric-value" id="energyValue">0</span><span class="metric-label">Energy</span></div>
+      <div class="metric"><span class="metric-value" id="brightValue">0</span><span class="metric-label">Brightness</span></div>
+    </div>
+
+    <div class="live-bottom">
+      <div class="now-card glass" id="nowCard">
+        <div class="now-art" id="nowArt"></div>
+        <div class="now-text">
+          <span class="now-kicker" id="nowKicker">Now Listening</span>
+          <span class="now-title" id="nowTitle">マイクをオンにして音楽を流そう</span>
+          <span class="now-artist" id="nowArtist">他のアプリで再生中の曲を聴き取って記録します</span>
+        </div>
+      </div>
+      <div class="live-controls">
+        <button class="pill glass" id="fileBtn" aria-label="ファイル">
+          <svg viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        </button>
+        <button class="mic-btn" id="micBtn" aria-label="マイク">
+          <span class="mic-ring"></span>
+          <svg viewBox="0 0 24 24"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1M12 19v3"/></svg>
+        </button>
+        <button class="pill glass" id="identifyBtn" aria-label="今の曲を記録">
+          <svg viewBox="0 0 24 24"><path d="M2 12h2M6 8v8M10 4v16M14 7v10M18 10v4M22 12h0"/></svg>
+        </button>
+      </div>
+      <label class="auto-toggle glass">
+        <input type="checkbox" id="autoListen" />
+        <span class="switch"></span>
+        <span>自動記録</span>
+      </label>
+      <input type="file" id="fileInput" accept="audio/*" hidden />
+    </div>
+  </section>
+
+  <!-- DISCOVER -->
+  <section id="view-discover" class="view" data-view="discover">
+    <div class="scroll">
+      <header class="page-head">
+        <p class="eyebrow" id="weekLabel">Week —</p>
+        <h2 class="page-title">This Week's<br /><span class="grad-text">Discoveries.</span></h2>
+        <p class="page-sub" id="discoverSub">あなたの記録から、まだ聴いたことのない曲を毎週お届けします。</p>
+        <div class="countdown glass" id="countdown"><span class="cd-dot"></span><span id="countdownText">次の更新まで —</span></div>
+      </header>
+
+      <div class="carousel-wrap">
+        <div class="carousel" id="carousel"></div>
+        <div class="carousel-empty" id="carouselEmpty" hidden>
+          <div class="empty-orb"></div>
+          <p>まだ記録がありません。<br />Live で曲を記録するか、設定からデモデータを読み込んでください。</p>
+        </div>
+      </div>
+
+      <div class="focus-panel" id="focusPanel" hidden>
+        <p class="focus-reason" id="focusReason"></p>
+        <h3 class="focus-title" id="focusTitle"></h3>
+        <p class="focus-artist" id="focusArtist"></p>
+        <div class="focus-actions">
+          <button class="btn-primary sm" id="previewBtn">▶︎ 試聴</button>
+          <button class="btn-glass" id="likeBtn">♡ 好き</button>
+          <button class="btn-glass" id="heardBtn">聴いた</button>
+        </div>
+        <div class="open-links">
+          <a id="openApple" target="_blank" rel="noopener">Apple Music</a>
+          <a id="openSpotify" target="_blank" rel="noopener">Spotify</a>
+          <a id="openYoutube" target="_blank" rel="noopener">YouTube</a>
+        </div>
+      </div>
+
+      <div class="regen-row">
+        <button class="btn-glass" id="regenBtn">今週の提案を作り直す</button>
+      </div>
+
+      <section class="past-weeks" id="pastWeeks"></section>
+    </div>
+  </section>
+
+  <!-- YOU -->
+  <section id="view-you" class="view" data-view="you">
+    <div class="scroll">
+      <header class="page-head">
+        <p class="eyebrow">Your Sound</p>
+        <h2 class="page-title">Taste,<br /><span class="grad-text">decoded.</span></h2>
+      </header>
+
+      <div class="stat-grid">
+        <div class="stat-card grad-a"><span class="stat-num" id="statPlays">0</span><span class="stat-cap">記録した再生</span></div>
+        <div class="stat-card grad-b"><span class="stat-num" id="statArtists">0</span><span class="stat-cap">アーティスト</span></div>
+        <div class="stat-card grad-c"><span class="stat-num" id="statBpm">—</span><span class="stat-cap">平均 BPM</span></div>
+        <div class="stat-card grad-d"><span class="stat-num" id="statBright">—</span><span class="stat-cap">明るさ</span></div>
+      </div>
+
+      <div class="block glass">
+        <h4 class="block-title">サウンドの傾向</h4>
+        <p class="persona" id="persona">記録が増えると、あなたの音の好みが見えてきます。</p>
+      </div>
+
+      <div class="block glass">
+        <h4 class="block-title">トップアーティスト</h4>
+        <ol class="bars" id="topArtists"></ol>
+      </div>
+
+      <div class="block glass">
+        <h4 class="block-title">ジャンル</h4>
+        <div class="genre-cloud" id="genres"></div>
+      </div>
+
+      <div class="block glass">
+        <h4 class="block-title">よく聴く時間帯</h4>
+        <div class="hours" id="hours"></div>
+      </div>
+
+      <div class="block glass">
+        <div class="block-head">
+          <h4 class="block-title">履歴</h4>
+          <button class="link-btn" id="addManualBtn">＋ 手動で追加</button>
+        </div>
+        <ul class="history" id="history"></ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- Tab bar -->
+  <nav class="tabbar glass" id="tabbar">
+    <button class="tab active" data-tab="live">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><circle cx="12" cy="12" r="7" opacity=".6"/><circle cx="12" cy="12" r="10.5" opacity=".3"/></svg>
+      <span>Live</span>
+    </button>
+    <button class="tab" data-tab="discover">
+      <svg viewBox="0 0 24 24"><path d="M12 2l2.6 6.9L22 9.3l-5.6 4.6L18.2 22 12 17.8 5.8 22l1.8-8.1L2 9.3l7.4-.4z"/></svg>
+      <span>Discover</span>
+    </button>
+    <button class="tab" data-tab="you">
+      <svg viewBox="0 0 24 24"><path d="M3 20V10M9 20V4M15 20v-8M21 20V7"/></svg>
+      <span>You</span>
+    </button>
+    <span class="tab-indicator" id="tabIndicator"></span>
+  </nav>
+
+  <!-- Sheets -->
+  <div class="sheet-backdrop" id="sheetBackdrop" hidden></div>
+
+  <div class="sheet" id="settingsSheet" hidden>
+    <div class="sheet-handle"></div>
+    <h3 class="sheet-title">設定</h3>
+
+    <div class="field">
+      <label for="auddToken">曲認識 API トークン（AudD）</label>
+      <input id="auddToken" type="password" placeholder="audd.io で取得したトークン" autocomplete="off" />
+      <p class="hint">マイクで拾った音から曲名を特定するのに使います。<a href="https://dashboard.audd.io/" target="_blank" rel="noopener">audd.io</a> で無料トークンを取得できます。</p>
+    </div>
+
+    <div class="field">
+      <label for="autoInterval">自動記録の間隔</label>
+      <select id="autoInterval">
+        <option value="45">45 秒</option>
+        <option value="90">90 秒</option>
+        <option value="150">150 秒</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label>データ</label>
+      <div class="btn-col">
+        <button class="btn-glass" id="demoBtn">デモデータを読み込む</button>
+        <button class="btn-glass" id="exportBtn">書き出し（JSON）</button>
+        <button class="btn-glass" id="importBtn">読み込み（JSON）</button>
+        <button class="btn-glass danger" id="clearBtn">すべて消去</button>
+      </div>
+      <input type="file" id="importInput" accept="application/json" hidden />
+      <p class="hint">記録はこのブラウザ内（localStorage）だけに保存されます。</p>
+    </div>
+
+    <button class="btn-primary block-btn" id="closeSettings">完了</button>
+  </div>
+
+  <div class="sheet" id="manualSheet" hidden>
+    <div class="sheet-handle"></div>
+    <h3 class="sheet-title">曲を追加</h3>
+    <div class="field">
+      <input id="manualQuery" type="search" placeholder="曲名やアーティスト名で検索" autocomplete="off" />
+    </div>
+    <ul class="search-results" id="manualResults"></ul>
+    <button class="btn-glass block-btn" id="closeManual">閉じる</button>
+  </div>
+
+  <div class="toast" id="toast" hidden></div>
+  <audio id="previewAudio" preload="none"></audio>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
