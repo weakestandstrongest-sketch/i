@@ -1,5 +1,5 @@
 // Offline shell cache. Network first so updates show up immediately.
-const CACHE = 'resonance-v5';
+const CACHE = 'resonance-v6';
 const SHELL = ['./', 'index.html', 'styles.css', 'js/main.js', 'js/audio.js', 'js/visualizer.js', 'js/store.js', 'js/deezer.js', 'js/recognizer.js', 'js/recommend.js', 'js/lastfm.js', 'js/youtube.js', 'manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {

@@ -21,13 +21,20 @@ try { viz = new Visualizer($('#stage')); } catch (e) { console.error(e); }
 
 /* ---------------- Render loop ---------------- */
 let frameN = 0;
+let renderErrorShown = false;
 // Audio is analysed on its own ~60 Hz clock so beats are caught even when
 // rendering drops frames on a slower phone.
 setInterval(() => engine.update(performance.now()), 16);
 
 function loop(t) {
   const f = engine.f;
-  viz?.render(t, f, engine.mode === 'idle' ? null : engine.freq, engine.ctx ? engine.ctx.sampleRate / 2 : 24000);
+  // A drawing error must never stop the loop (and with it the BPM display and meters);
+  // show it once so it can be reported.
+  try {
+    viz?.render(t, f, engine.mode === 'idle' ? null : engine.freq, engine.ctx ? engine.ctx.sampleRate / 2 : 24000);
+  } catch (e) {
+    if (!renderErrorShown) { renderErrorShown = true; console.error(e); toast(`描画エラー: ${e.message}`, 8000); }
+  }
   if (++frameN % 6 === 0 && currentView === 'live') {
     $('#bpmValue').textContent = f.bpm ? Math.round(f.bpm) : '--';
     $('#energyValue').textContent = Math.round(f.level * 100);

@@ -9,9 +9,13 @@
 // and active (0..1 gate that falls to 0 in silence).
 
 const BANDS = {
-  bass: { lo: 30, hi: 120, attack: 0.65, release: 0.10, hitDecay: 0.90, refractory: 200, k: 1.5 },
-  mid: { lo: 250, hi: 2000, attack: 0.45, release: 0.12, hitDecay: 0.87, refractory: 110, k: 1.6 },
-  treble: { lo: 4000, hi: 12000, attack: 0.8, release: 0.30, hitDecay: 0.72, refractory: 60, k: 1.7 },
+  // k: onset threshold in standard deviations. Bass spans only ~5 FFT bins, so pure noise
+  // jumps around a lot there; real kicks score 5-9, so it gets the highest bar.
+  // jump: an onset also needs the band's energy to rise this much above its ~150 ms average.
+  // Measured: steady fan noise medians 0.16 / 0.04 / 0.03, dense music bottom-10 % 0.20 / 0.07 / 0.07.
+  bass: { lo: 30, hi: 120, attack: 0.65, release: 0.10, hitDecay: 0.90, refractory: 200, k: 2.6, jump: 0.2 },
+  mid: { lo: 250, hi: 2000, attack: 0.45, release: 0.12, hitDecay: 0.87, refractory: 110, k: 2.4, jump: 0.06 },
+  treble: { lo: 4000, hi: 12000, attack: 0.8, release: 0.30, hitDecay: 0.72, refractory: 60, k: 2.0, jump: 0.06 },
 };
 
 // Byte spectrum (dB, -82..-20) -> compressed magnitude 0..1. In dB terms a loud kick's
@@ -52,9 +56,12 @@ export class AudioEngine {
       // prev: last spectrum slice for flux, last: time of last onset.
       this._b[name] = { peak: 0.05, floor: 0, fm: 0, fv: 0, n: 0, prev: null, last: 0 };
     }
-    this._noise = 0.02;     // adaptive noise floor of the whole input
+    this._noise = null;     // room noise estimate: follows quiet moments down fast, rises only over minutes
+    this._pulse = 0;        // recent rhythmic activity; keeps the scene awake while beats keep coming
+    this._rawS = 0;         // input loudness smoothed over ~0.3 s
     this._lastBeat = 0;
     this._intervals = [];
+    this._fires = [];
     this._lastT = 0;
   }
 
@@ -139,9 +146,16 @@ export class AudioEngine {
     const top = idx(12000);
     for (let i = 1; i < top; i++) total += freq[i];
     const raw = total / (top * 255);
-    this._noise = raw < this._noise ? this._noise + (raw - this._noise) * 0.05 : this._noise + (raw - this._noise) * 0.0008;
-    const gateTarget = Math.min(1, Math.max(0, (raw - this._noise * 1.15) / Math.max(this._noise * 1.5, 0.01)));
-    f.active += (gateTarget - f.active) * (gateTarget > f.active ? 0.3 : 0.04) * k60;
+    // Rising slowly matters: continuous music must never be mistaken for room noise.
+    // Smoothed first, so the random flicker of steady hiss doesn't read as sound.
+    this._rawS += (raw - this._rawS) * Math.min(1, 0.06 * k60);
+    if (this._noise === null) this._noise = this._rawS = raw;
+    // Learn steady noise (fan, air conditioner) within seconds while nothing rhythmic is
+    // happening; while hits keep coming, rise only over minutes so music isn't absorbed.
+    const rise = this._pulse > 0.2 ? 0.00003 : 0.002;
+    this._noise += (this._rawS - this._noise) * (this._rawS < this._noise ? 0.05 : rise) * k60;
+    // All relative to the noise estimate, so a quiet mic signal works as well as a loud one.
+    const levelGate = Math.min(1, Math.max(0, (this._rawS - this._noise * 1.25) / (this._noise * 0.5 + 1e-5)));
 
     const sens = this.sensitivity;
     let num = 0, den = 0;
@@ -162,13 +176,15 @@ export class AudioEngine {
       const e = sum / (hi - lo + 1);
       rawLevel += e * (name === 'bass' ? 0.45 : name === 'mid' ? 0.4 : 0.15);
       st.e = e;
+      st.jump = st.eSlow ? e / st.eSlow - 1 : 0;   // relative rise over the last ~150 ms
+      st.eSlow = (st.eSlow || e) + (e - (st.eSlow || e)) * Math.min(1, 0.12 * k60);
 
       // Sustained level: how far the band rises above its own recent average,
       // relative to its recent peak. Loud, compressed music doesn't pin it at max.
-      st.peak = Math.max(e, st.peak * Math.pow(0.997, k60), 0.03);
+      st.peak = Math.max(e, st.peak * Math.pow(0.997, k60), 0.002);
       st.floor += (e - st.floor) * 0.025 * k60;
       const base = st.floor * 0.92;
-      const rise = Math.max(0, e - base) / Math.max(st.peak - base, 0.008);
+      const rise = Math.max(0, e - base) / Math.max(st.peak - base, st.peak * 0.15);
       const n = Math.pow(Math.min(1, rise * 0.8 + (e / st.peak) * 0.2), 2.0 - Math.min(1.6, bs * 0.4));
       const target = Math.min(1, n * (0.6 + bs * 0.3)) * f.active;
       const rate = target > f[name] ? cfg.attack : cfg.release;
@@ -186,8 +202,14 @@ export class AudioEngine {
       flux /= hi - lo + 1;
       st.flux = flux;
       st.sd = Math.sqrt(st.fv);
-      z[name] = st.n > 30 ? (flux - st.fm) / (st.sd + 0.002) : 0;
+      z[name] = st.n > 30 ? (flux - st.fm) / (st.sd + st.fm * 0.05 + 1e-6) : 0;
     }
+
+    // Activity: confirmed hits keep the scene awake for a couple of seconds (set in _fire),
+    // so continuous music is never mistaken for room noise.
+    this._pulse *= Math.pow(0.5, dt / 2000);
+    const gate = Math.max(levelGate, this._pulse);
+    f.active += (gate - f.active) * Math.min(1, (gate > f.active ? 0.3 : 0.04) * k60);
 
     // Decide hits after all bands are measured. A loud hi-hat can leak downwards,
     // so bass/mid have to be at least half as strong as a treble attack in the same
@@ -204,8 +226,8 @@ export class AudioEngine {
       const kEff = cfg.k + 0.6 - bs * 0.4;
       f[name + 'Hit'] *= Math.pow(cfg.hitDecay, k60);
       const own = z[name];
-      if (own > kEff && own >= masked[name] && !quiet[name] && st.flux > st.fm + 0.002
-          && t - st.last > cfg.refractory && f.active > 0.3) {
+      if (own > kEff && own >= masked[name] && !quiet[name] && st.flux > st.fm * 1.15 + 1e-6 && st.jump > cfg.jump
+          && t - st.last > cfg.refractory && raw > this._noise * 1.05) {
         st.last = t;
         // Strength varies with how far past the threshold the attack went.
         const cand = { t, z: own, e: st.e, strength: Math.max(0.3, Math.min(1, 0.3 + (own - kEff) / 6)) };
@@ -254,6 +276,12 @@ export class AudioEngine {
   }
 
   _fire(name, c, f) {
+    // Rhythm keeps the scene awake: three hits within 2 s. Stray blips from room noise
+    // (a fan's random bass flicker, ~one every 2 s) don't qualify; music easily does.
+    const fires = (this._fires = this._fires || []);
+    fires.push(c.t);
+    if (fires.length > 3) fires.shift();
+    if (fires.length === 3 && fires[2] - fires[0] < 2000) this._pulse = 1;
     f[name + 'Str'] = c.strength;
     f[name + 'Hit'] = Math.max(f[name + 'Hit'], c.strength);
     f[name + 'Hits']++;
