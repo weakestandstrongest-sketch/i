@@ -11,13 +11,18 @@ const $ = (s) => document.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const engine = new AudioEngine();
+engine.sensitivity = store.get().settings.sensitivity ?? 1.5;
 let viz = null;
 try { viz = new Visualizer($('#stage')); } catch (e) { console.error(e); }
 
 /* ---------------- Render loop ---------------- */
 let frameN = 0;
+// Audio is analysed on its own ~60 Hz clock so beats are caught even when
+// rendering drops frames on a slower phone.
+setInterval(() => engine.update(performance.now()), 16);
+
 function loop(t) {
-  const f = engine.update(t);
+  const f = engine.f;
   viz?.render(t, f, engine.mode === 'idle' ? null : engine.freq);
   if (++frameN % 6 === 0 && currentView === 'live') {
     $('#bpmValue').textContent = f.bpm ? Math.round(f.bpm) : '--';
@@ -735,6 +740,8 @@ $('#openSettings').addEventListener('click', () => {
   $('#lastfmUser').value = st.lastfmUser;
   $('#lastfmKey').value = st.lastfmKey;
   $('#googleClientId').value = st.googleClientId;
+  $('#sensitivity').value = String(st.sensitivity ?? 1.5);
+  $('#sensValue').textContent = Number(st.sensitivity ?? 1.5).toFixed(1);
   showLastfmStatus();
   showYtStatus();
   preloadGoogle();
@@ -750,6 +757,13 @@ $('#closeSettings').addEventListener('click', () => {
   if (autoTimer) startAuto();
   closeSheets();
   syncLastfm();
+});
+// Applies live so you can tune it while music plays.
+$('#sensitivity').addEventListener('input', (e) => {
+  const v = Number(e.target.value);
+  engine.sensitivity = v;
+  $('#sensValue').textContent = v.toFixed(1);
+  store.update((s) => (s.settings.sensitivity = v));
 });
 $('#lastfmSyncBtn').addEventListener('click', () => { saveLastfmFields(); syncLastfm({ manual: true }); });
 

@@ -11,8 +11,16 @@ export class AudioEngine {
     this.freq = new Uint8Array(1024);
     this.time = new Uint8Array(2048);
 
-    this.f = { bass: 0, mid: 0, treble: 0, level: 0, centroid: 0, beat: 0, bpm: 0 };
-    this._bassAvg = 0;
+    // bass/mid/treble/level are auto-gained to 0..1 so quiet sound still moves the scene.
+    // beat: kick onset (1 then decays), snare: high-band onset, beatCount: kicks so far.
+    this.f = { bass: 0, mid: 0, treble: 0, level: 0, centroid: 0, beat: 0, snare: 0, bpm: 0, beatCount: 0 };
+    this.sensitivity = 1.5;   // 0.5 (calm) .. 3 (very reactive)
+    this._peak = { bass: 0.05, mid: 0.05, treble: 0.05 };
+    this._prevLow = null;
+    this._prevHigh = null;
+    this._flux = [];          // recent kick onset strengths
+    this._fluxHi = [];
+    this._lastSnare = 0;
     this._lastBeat = 0;
     this._intervals = [];
     // Running feature accumulators, reset whenever a track is captured.
@@ -25,7 +33,10 @@ export class AudioEngine {
       this.ctx = new AC();
       this.analyser = this.ctx.createAnalyser();
       this.analyser.fftSize = 2048;
-      this.analyser.smoothingTimeConstant = 0.78;
+      // Less smoothing and a narrower dB window make the spectrum jumpier and louder.
+      this.analyser.smoothingTimeConstant = 0.55;
+      this.analyser.minDecibels = -88;
+      this.analyser.maxDecibels = -22;
       this.freq = new Uint8Array(this.analyser.frequencyBinCount);
       this.time = new Uint8Array(this.analyser.fftSize);
     }
@@ -58,6 +69,8 @@ export class AudioEngine {
   }
 
   stop() {
+    this._prevLow = this._prevHigh = null;
+    this._flux = []; this._fluxHi = [];
     if (this.source) { try { this.source.disconnect(); } catch {} this.source = null; }
     if (this.analyser) { try { this.analyser.disconnect(); } catch {} }
     if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
@@ -77,6 +90,7 @@ export class AudioEngine {
       f.level += (0.1 - f.level) * 0.05;
       f.centroid += (0.35 + 0.15 * Math.sin(t * 0.0003) - f.centroid) * 0.02;
       f.beat *= 0.9;
+      f.snare *= 0.85;
       return f;
     }
 
@@ -98,25 +112,66 @@ export class AudioEngine {
     const centroid = den > 0 ? Math.min(1, (num / den) / idx(5000)) : 0;
     const level = bass * 0.45 + mid * 0.4 + treble * 0.15;
 
-    const k = 0.35;
-    f.bass += (bass - f.bass) * k;
-    f.mid += (mid - f.mid) * k;
-    f.treble += (treble - f.treble) * k;
-    f.level += (level - f.level) * k;
+    // Auto gain: each band is measured against its own recent peak, so a phone
+    // mic across the room moves the scene as much as a loud speaker does.
+    const sens = this.sensitivity;
+    const gain = (band, raw) => {
+      const pk = this._peak;
+      pk[band] = Math.max(raw, pk[band] * 0.997, 0.03);
+      const gate = Math.min(1, raw / 0.015);              // stay calm in silence
+      const n = Math.pow(raw / pk[band], 2.2 - sens * 0.4); // >1 exponent = punchier peaks
+      return Math.min(1, n * (0.55 + sens * 0.3) * gate);
+    };
+    const nb = gain('bass', bass), nm = gain('mid', mid), nt = gain('treble', treble);
+    const nl = nb * 0.45 + nm * 0.4 + nt * 0.15;
+
+    // Fast attack, slower release: hits land instantly and fall off smoothly.
+    const ease = (cur, v) => cur + (v - cur) * (v > cur ? 0.7 : 0.18);
+    f.bass = ease(f.bass, nb);
+    f.mid = ease(f.mid, nm);
+    f.treble = ease(f.treble, nt);
+    f.level = ease(f.level, nl);
     f.centroid += (centroid - f.centroid) * 0.05;
 
-    // Beat detection: bass energy spike over its running average.
-    this._bassAvg = this._bassAvg * 0.96 + bass * 0.04;
-    f.beat *= 0.88;
-    if (bass > this._bassAvg * 1.28 && bass > 0.18 && t - this._lastBeat > 280) {
+    // Onsets via spectral flux (rise in energy since last frame) with an
+    // adaptive threshold: mean + k * std of the last ~1.5 s.
+    const flux = (lo, hi, key) => {
+      const prev = this[key];
+      let sum = 0;
+      for (let i = lo; i <= hi; i++) {
+        const d = this.freq[i] - (prev ? prev[i - lo] : this.freq[i]);
+        if (d > 0) sum += d;
+      }
+      this[key] = this.freq.slice(lo, hi + 1);
+      return sum / ((hi - lo + 1) * 255);
+    };
+    const isOnset = (hist, v, k) => {
+      hist.push(v);
+      if (hist.length > 90) hist.shift();
+      if (hist.length < 20) return false;
+      const mean = hist.reduce((a, b) => a + b, 0) / hist.length;
+      const sd = Math.sqrt(hist.reduce((a, b) => a + (b - mean) ** 2, 0) / hist.length);
+      return v > mean + sd * k && v > 0.004;
+    };
+    const k = 1.9 - sens * 0.3;   // more sensitive = lower threshold
+    const low = flux(idx(30), idx(160), '_prevLow');
+    const high = flux(idx(2500), idx(9000), '_prevHigh');
+    f.beat *= 0.86;
+    f.snare *= 0.82;
+    if (isOnset(this._flux, low, k) && t - this._lastBeat > 230) {
       const dt = t - this._lastBeat;
       this._lastBeat = t;
       f.beat = 1;
+      f.beatCount++;
       if (dt < 1500) {
         this._intervals.push(dt);
         if (this._intervals.length > 24) this._intervals.shift();
         if (this._intervals.length >= 6) f.bpm = estimateBpm(this._intervals);
       }
+    }
+    if (isOnset(this._fluxHi, high, k + 0.2) && t - this._lastSnare > 120) {
+      this._lastSnare = t;
+      f.snare = 1;
     }
 
     if (level > 0.05) {

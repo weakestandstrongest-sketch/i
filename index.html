@@ -171,6 +171,12 @@
     </div>
 
     <div class="field">
+      <label for="sensitivity">ビジュアライザーの感度 <span id="sensValue"></span></label>
+      <input id="sensitivity" type="range" min="0.5" max="3" step="0.1" />
+      <p class="hint">音が小さい・離れた場所で鳴っているときは高めに。動きすぎるときは低めに。</p>
+    </div>
+
+    <div class="field">
       <label for="googleClientId">YouTube Music の高評価（Google 連携）</label>
       <input id="googleClientId" type="text" placeholder="Google の OAuth クライアント ID" autocomplete="off" autocapitalize="off" spellcheck="false" />
       <button class="btn-glass" id="ytSyncBtn" style="margin-top:10px">Google でログインして同期</button>

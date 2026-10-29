@@ -277,6 +277,8 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 .field label { display: block; font-size: 13px; color: var(--fg-dim); margin-bottom: 8px; font-weight: 500; }
 .field input, .field select { width: 100%; padding: 14px 16px; border-radius: 14px; border: .5px solid var(--glass-line); background: rgba(255,255,255,.07); outline: none; font-size: 16px; -webkit-appearance: none; appearance: none; }
 .field input:focus { border-color: var(--accent); }
+.field input[type="range"] { padding: 0; height: 28px; border: 0; background: none; accent-color: var(--g2); -webkit-appearance: auto; appearance: auto; }
+#sensValue { color: var(--fg); font-variant-numeric: tabular-nums; margin-left: 4px; }
 .hint { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--fg-faint); }
 .btn-col { display: flex; flex-direction: column; gap: 8px; }
 .btn-col .btn-glass { text-align: left; border-radius: 14px; }

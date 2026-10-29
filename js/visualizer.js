@@ -67,11 +67,19 @@ export class Visualizer {
     };
     this.hue = 0;
     this.shake = 0;
+    this.spinVel = 0;       // ring angular velocity, kicked by beats
+    this.spinAngle = 0;
+    this.orbit = 0;         // camera orbit angle, faster when loud
+    this.punch = 0;         // camera dolly on kicks
+    this.flash = 0;         // snare flash
+    this.lastBeatCount = 0;
+    this.panelPeak = [];
 
     this._sky();
     this._core();
     this._panels();
     this._particles();
+    this._shockwaves();
 
     this.composer = new EffectComposer(this.renderer);
     this.composer.addPass(new RenderPass(this.scene, this.camera));
@@ -96,7 +104,7 @@ export class Visualizer {
           float n2=snoise(vP*3.2-vec3(uTime*0.05));
           float blob=smoothstep(-0.2,0.9,n+0.35*n2+uMid*0.6);
           vec3 col=palette(uHue+n*0.18+vP.y*0.12);
-          float glow=blob*(0.18+uLevel*1.1+uBeat*0.25);
+          float glow=blob*(0.1+uLevel*0.26+uBeat*0.08);
           float vign=smoothstep(-0.9,0.4,vP.z*-1.0+0.2);
           gl_FragColor=vec4(col*glow*vign,1.0);
         }`,
@@ -112,7 +120,7 @@ export class Visualizer {
         uniform float uTime,uBass,uMid,uTreble,uBeat; varying vec3 vN; varying vec3 vV; varying float vD;
         void main(){
           vec3 p=position;
-          float d=snoise(normal*1.4+vec3(uTime*0.35))*(0.18+uBass*0.9)
+          float d=snoise(normal*1.4+vec3(uTime*0.35))*(0.16+uBass*0.5)
                  +snoise(normal*4.0+vec3(uTime*0.8))*(0.03+uTreble*0.25);
           p+=normal*(d+uBeat*0.12);
           vD=d;
@@ -126,7 +134,7 @@ export class Visualizer {
           float fr=pow(1.0-max(dot(vN,vV),0.0),2.2);
           vec3 base=palette(uHue+vD*0.8+fr*0.35+uTime*0.01);
           vec3 rim=palette(uHue+0.45+fr*0.2);
-          vec3 col=mix(base*0.22,rim*1.05,fr)+base*uLevel*0.45;
+          vec3 col=mix(base*0.22,rim*1.0,fr)+base*uLevel*0.22;
           gl_FragColor=vec4(col,1.0);
         }`,
     });
@@ -156,9 +164,9 @@ export class Visualizer {
             float n=snoise(vec3(uv*2.2,uTime*0.2+uIdx*10.0));
             vec3 col=palette(uHue+uIdx*0.6+n*0.15+uv.y*0.15);
             float edge=smoothstep(0.0,0.06,uv.x)*smoothstep(1.0,0.94,uv.x)*smoothstep(0.0,0.06,uv.y)*smoothstep(1.0,0.94,uv.y);
-            float glow=0.1+uAmp*0.95+uBeat*0.12;
-            float line=smoothstep(0.012,0.0,abs(uv.y-0.5-n*0.1*uAmp))*uAmp*2.0;
-            gl_FragColor=vec4(col*(glow+line),edge*(0.4+uAmp*0.35));
+            float glow=0.05+uAmp*0.3+uBeat*0.05;
+            float line=smoothstep(0.012,0.0,abs(uv.y-0.5-n*0.1*uAmp))*uAmp*1.0;
+            gl_FragColor=vec4(col*(glow+line),edge*(0.32+uAmp*0.28));
           }`,
       });
       const m = new THREE.Mesh(geo, mat);
@@ -170,6 +178,39 @@ export class Visualizer {
       this.panels.push({ wrap, mesh: m, mat });
     }
     this.panelGroup.rotation.x = 0.12;
+  }
+
+  // Expanding rings fired from the core on every kick.
+  _shockwaves() {
+    this.waves = [];
+    for (let i = 0; i < 6; i++) {
+      const mat = new THREE.ShaderMaterial({
+        transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+        uniforms: { uHue: this.u.uHue, uLife: { value: 0 }, uShift: { value: 0 } },
+        vertexShader: `varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);} `,
+        fragmentShader: NOISE + `
+          uniform float uHue,uLife,uShift; varying vec2 vUv;
+          void main(){
+            float a=(1.0-uLife); a*=a;
+            gl_FragColor=vec4(palette(uHue+uShift+vUv.x*0.3)*0.9*a, a);
+          }`,
+      });
+      const mesh = new THREE.Mesh(new THREE.RingGeometry(0.96, 1.0, 96, 1), mat);
+      mesh.visible = false;
+      this.scene.add(mesh);
+      this.waves.push({ mesh, mat, life: 1, tiltX: 0, tiltY: 0 });
+    }
+    this.waveIdx = 0;
+  }
+
+  _fireWave(strength) {
+    const w = this.waves[this.waveIdx++ % this.waves.length];
+    w.life = 0;
+    w.strength = strength;
+    w.mesh.visible = true;
+    // Random tilt so rings cut through space at different angles.
+    w.mesh.rotation.set((Math.random() - 0.5) * 1.4, (Math.random() - 0.5) * 1.4, Math.random() * Math.PI);
+    w.mat.uniforms.uShift.value = Math.random() * 0.5;
   }
 
   _particles() {
@@ -196,9 +237,10 @@ export class Visualizer {
         uniform float uTravel,uTreble,uPR; attribute float seed; varying float vSeed; varying float vFade;
         void main(){
           vec3 p=position; p.z=mod(p.z+uTravel+70.0,80.0)-70.0;
-          vSeed=seed; vFade=smoothstep(-70.0,-40.0,p.z)*smoothstep(12.0,4.0,p.z);
+          vSeed=seed; vFade=smoothstep(-70.0,-40.0,p.z)*smoothstep(6.0,1.0,p.z);
           vec4 mv=modelViewMatrix*vec4(p,1.0);
-          gl_PointSize=(1.5+seed*2.5+uTreble*6.0)*uPR*(18.0/-mv.z);
+          // Capped so specks flying past the lens never flood the screen.
+          gl_PointSize=min((1.5+seed*2.5+uTreble*3.0)*uPR*(18.0/max(-mv.z,1.0)), 28.0*uPR);
           gl_Position=projectionMatrix*mv;
         }`,
       fragmentShader: NOISE + `
@@ -226,6 +268,9 @@ export class Visualizer {
 
   render(t, f, spectrum) {
     const time = t / 1000;
+    const dt = Math.min(0.05, (t - (this._lastT || t)) / 1000) || 0.016;
+    this._lastT = t;
+    const k60 = dt * 60;   // frame-rate independent decay
     const u = this.u;
     u.uTime.value = time;
     u.uBass.value = f.bass;
@@ -234,45 +279,87 @@ export class Visualizer {
     u.uLevel.value = f.level;
     u.uBeat.value = f.beat;
 
-    // Hue drifts with brightness; strong beats nudge it forward.
-    this.hue += 0.0006 + f.beat * 0.004;
+    // New kick: fire a shockwave, kick the ring's spin, punch the camera.
+    if (f.beatCount !== this.lastBeatCount) {
+      this.lastBeatCount = f.beatCount;
+      this._fireWave(0.6 + f.bass * 0.6);
+      this.spinVel += (0.035 + f.bass * 0.05) * (f.beatCount % 8 < 4 ? 1 : -1);
+      this.punch = 1;
+      // Every 4th kick the palette jumps.
+      if (f.beatCount % 4 === 0) this.hue += 0.12;
+    }
+    this.punch *= Math.pow(0.88, k60);
+    this.flash = Math.max(this.flash * Math.pow(0.8, k60), f.snare);
+
+    this.hue += (0.0006 + f.level * 0.002) * k60;
     u.uHue.value = this.hue + f.centroid * 0.5;
 
-    this.core.rotation.y = time * 0.15;
-    this.core.rotation.x = Math.sin(time * 0.2) * 0.3;
-    const s = 1 + f.bass * 0.35 + f.beat * 0.08;
+    // Core: bigger breathing, twist with mids.
+    this.core.rotation.y += (0.004 + f.mid * 0.03) * k60;
+    this.core.rotation.x = Math.sin(time * 0.2) * 0.3 + f.treble * 0.3;
+    this.core.rotation.z = Math.sin(time * 0.13) * 0.2 + this.spinVel * 3;
+    const s = 0.95 + f.bass * 0.28 + f.beat * 0.14;
     this.core.scale.setScalar(s);
 
-    this.panelGroup.rotation.y = time * (0.08 + f.mid * 0.25);
+    // Ring of panels: spin with momentum, flare outward on hits.
+    this.spinVel *= Math.pow(0.95, k60);
+    this.spinAngle += (0.0015 + f.mid * 0.006 + this.spinVel) * k60;
+    this.panelGroup.rotation.y = this.spinAngle;
+    this.panelGroup.rotation.x = 0.12 + Math.sin(time * 0.3) * 0.15 + f.mid * 0.2;
+    this.panelGroup.rotation.z = Math.sin(time * 0.21) * 0.12 + this.spinVel * 1.5;
     const n = this.panels.length;
     this.panels.forEach((p, i) => {
       let amp = f.mid;
       if (spectrum) {
         const bins = Math.floor(spectrum.length * 0.45);
-        const a = Math.floor((i / n) * bins), b = Math.floor(((i + 1) / n) * bins);
+        // Log-spaced bands so every panel gets a lively slice of the spectrum.
+        const a = Math.floor(Math.pow(i / n, 1.8) * bins) + 1;
+        const b = Math.max(a + 1, Math.floor(Math.pow((i + 1) / n, 1.8) * bins) + 1);
         let sum = 0;
         for (let k = a; k < b; k++) sum += spectrum[k];
-        amp = sum / ((b - a) * 255);
+        const raw = sum / ((b - a) * 255);
+        this.panelPeak[i] = Math.max(raw, (this.panelPeak[i] || 0.05) * 0.996, 0.03);
+        amp = Math.min(1, Math.pow(raw / this.panelPeak[i], 1.6) * Math.min(1, raw / 0.015));
       }
-      p.mat.uniforms.uAmp.value += (amp - p.mat.uniforms.uAmp.value) * 0.25;
-      const r = 1 + f.bass * 0.25 + p.mat.uniforms.uAmp.value * 0.15;
-      p.mesh.scale.set(r, 0.85 + p.mat.uniforms.uAmp.value * 0.9, r);
-      p.mesh.position.y = Math.sin(time * 0.6 + i) * 0.35;
+      const cur = p.mat.uniforms.uAmp.value;
+      p.mat.uniforms.uAmp.value = cur + (amp - cur) * (amp > cur ? 0.6 : 0.15);
+      const a = p.mat.uniforms.uAmp.value;
+      // Kept under ~1.4x so a flaring panel never sweeps through the camera.
+      const r = 1 + f.bass * 0.15 + a * 0.12 + f.beat * 0.1;
+      p.mesh.scale.set(r, 0.75 + a * 0.6, r);
+      p.mesh.position.y = Math.sin(time * 0.6 + i) * 0.35 + (a - 0.3) * 0.6 * Math.sin(i * 2.1);
     });
 
-    this.particleMat.uniforms.uTravel.value += 0.03 + f.level * 0.9 + f.beat * 0.6;
-    this.points.rotation.z = time * 0.03;
+    // Shockwaves expand and fade.
+    for (const w of this.waves) {
+      if (!w.mesh.visible) continue;
+      w.life += dt / 1.1;
+      if (w.life >= 1) { w.mesh.visible = false; continue; }
+      const e = 1 - Math.pow(1 - w.life, 3);
+      // Stop short of the camera so a ring never passes through the lens.
+      const maxR = this.camera.position.length() * 0.72;
+      w.mesh.scale.setScalar(1.4 + e * (maxR - 1.4) * Math.min(1, w.strength));
+      w.mat.uniforms.uLife.value = w.life;
+    }
 
-    this.shake = Math.max(this.shake * 0.85, f.beat * 0.12);
+    // Particles rush past on loud passages and lurch on kicks.
+    this.particleMat.uniforms.uTravel.value += (0.03 + f.level * 1.4 + f.beat * 1.2) * k60;
+    this.points.rotation.z += (0.0005 + f.mid * 0.004 + this.spinVel * 0.5) * k60;
+
+    // Camera: orbit speeds up with energy, dollies in on kicks, sways with mids.
+    this.orbit += (0.0015 + f.level * 0.008) * k60;
+    this.shake = Math.max(this.shake * Math.pow(0.85, k60), f.beat * 0.18);
     const portrait = window.innerWidth < window.innerHeight;
     const baseZ = portrait ? 12 : 9;
-    this.camera.position.x = Math.sin(time * 0.11) * 1.6 + (Math.random() - 0.5) * this.shake;
-    this.camera.position.y = 0.4 + Math.cos(time * 0.09) * 0.8 + (Math.random() - 0.5) * this.shake;
-    this.camera.position.z = baseZ - f.bass * 1.2;
+    this.camera.position.x = Math.sin(this.orbit) * 2.2 + (Math.random() - 0.5) * this.shake;
+    this.camera.position.y = 0.4 + Math.cos(this.orbit * 0.8) * 1.0 + (Math.random() - 0.5) * this.shake;
+    this.camera.position.z = baseZ - f.bass * 0.8 - this.punch * 0.9;
     // Portrait: aim below the core so it floats in the upper half, clear of the controls.
     this.camera.lookAt(0, portrait ? -2.2 : -0.6, 0);
+    this.camera.rotation.z += Math.sin(time * 0.5) * 0.03 * (0.3 + f.mid);
 
-    this.bloom.strength = 0.45 + f.level * 0.9 + f.beat * 0.35;
+    this.bloom.strength = Math.min(1.05, 0.4 + f.level * 0.4 + f.beat * 0.2 + this.flash * 0.2);
+    this.renderer.toneMappingExposure = 1.0 + Math.min(0.1, this.flash * 0.08 + f.beat * 0.04);
     this.composer.render();
   }
 }
