@@ -610,7 +610,7 @@ export class Visualizer {
         amp = Math.pow(raw / this.needlePeak[i], 2.5) * f.treble;
       }
       this.needleJit[i] *= halfLife(dt, 0.05);
-      const len = 0.05 + (amp * 1.7 + this.needleJit[i] * 1.1) * act;
+      const len = 0.05 + (amp * 0.9 + this.needleJit[i] * 0.6) * act;   // kept short so the crown stays around the core
       const a = rot + (i / nn) * Math.PI * 2;
       const c = Math.cos(a), s = Math.sin(a);
       const o = i * 6;
