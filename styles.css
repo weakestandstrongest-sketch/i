@@ -137,7 +137,7 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 .carousel-wrap { position: relative; height: 430px; margin: 10px -20px 0; perspective: 1100px; perspective-origin: 50% 45%; touch-action: pan-y; overflow: hidden; }
 .carousel { position: absolute; left: 50%; top: 20px; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
 .card { position: absolute; left: -115px; top: 0; width: 230px; height: 340px; border-radius: 30px; overflow: hidden; transform-style: preserve-3d; backface-visibility: hidden; -webkit-backface-visibility: hidden; cursor: pointer; transition: box-shadow .4s, filter .4s; box-shadow: 0 30px 60px rgba(0,0,0,.55); }
-.card-bg { position: absolute; inset: -30%; background-size: cover; background-position: center; filter: blur(30px) saturate(2.2) brightness(1.05); transform: scale(1.2) translateZ(0); will-change: transform; }
+.card-bg { position: absolute; inset: -30%; background-size: cover; background-position: center; filter: blur(30px) saturate(2.2) brightness(1.05); transform: scale(1.2); }
 .card-tint { position: absolute; inset: 0; mix-blend-mode: soft-light; opacity: .9; }
 .card-sheen { position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,.35) 0%, transparent 32%, transparent 70%, rgba(255,255,255,.12) 100%); }
 .card-content { position: absolute; inset: 0; padding: 20px; display: flex; flex-direction: column; justify-content: space-between; }

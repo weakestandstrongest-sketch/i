@@ -3,7 +3,7 @@ import { Visualizer } from './visualizer.js';
 import { SpectrumView } from './spectrum.js';
 import { store, trackKey, weekKey, nextWeekStart } from './store.js';
 import { recordClip, identify } from './recognizer.js';
-import { deezer, fromDeezerTrack, pool } from './deezer.js';
+import { deezer, fromDeezerTrack, pool, coverAt } from './deezer.js';
 import { buildProfile, describePersona, generateWeekly } from './recommend.js';
 import { fetchRecent, enrich } from './lastfm.js';
 import { preloadGoogle, hasToken, signIn, fetchLikes, enrichLikes } from './youtube.js';
@@ -308,14 +308,14 @@ function buildCarousel() {
   const el = $('#carousel');
   el.innerHTML = weekTracks.map((t, i) => `
     <div class="card ${s.liked.includes(t.deezerId) ? 'liked' : ''}" data-i="${i}" style="transform: rotateY(${i * step}deg) translateZ(${radius}px)">
-      <div class="card-bg" style="background-image:url('${esc(t.cover)}')"></div>
+      <div class="card-bg" style="background-image:url('${esc(coverAt(t.cover, 250))}')"></div>
       <div class="card-tint" style="background:${TINTS[i % TINTS.length]}"></div>
       <div class="card-sheen"></div>
       <div class="card-content">
         <div class="card-top"><span class="badge">${t.deep ? 'Deep Cut' : 'New'}</span><span class="badge badge-like">${s.liked.includes(t.deezerId) ? '♥' : esc((t.genres || [])[0] || '')}</span></div>
         <div class="card-num">${String(i + 1).padStart(2, '0')}<sup>/${n}</sup></div>
         <div>
-          <div class="card-cover" style="background-image:url('${esc(t.cover)}')"></div>
+          <div class="card-cover" style="background-image:url('${esc(coverAt(t.cover, 250))}')"></div>
           <div class="card-title" style="margin-top:12px">${esc(t.title)}</div>
           <div class="card-artist">${esc(t.artist)}</div>
         </div>
@@ -534,7 +534,7 @@ function renderPastWeeks() {
       <div class="past-week-label">Week ${k.split('-W')[1]} · ${k.split('-W')[0]}</div>
       <div class="mini-row">${w.tracks.map((t) => `
         <a class="mini" href="https://music.apple.com/search?term=${encodeURIComponent(t.artist + ' ' + t.title)}" target="_blank" rel="noopener" style="text-decoration:none">
-          <div class="mini-cover" style="background-image:url('${esc(t.cover)}')"></div>
+          <div class="mini-cover" style="background-image:url('${esc(coverAt(t.cover, 250))}')"></div>
           <div class="mini-t">${esc(t.title)}</div><div class="mini-a">${esc(t.artist)}</div>
         </a>`).join('')}</div>
     </div>`).join('') : '';
@@ -655,14 +655,14 @@ function buildYouCards(s) {
       desc: 'YouTube Music で 👍 した曲。好みの分析とおすすめに使います',
       detail: () => `<div class="ys-block"><div class="ys-block-head"><h3>${s.ytLikes.length ? `${s.ytLikes.length} 曲` : 'まだありません'}</h3><button class="link-btn" data-act="yt">YouTube から同期</button></div>
         <ul class="history">${s.ytLikes.slice(0, 150).map((l) => `
-          <li><div class="h-cover" style="background-image:url('${esc(l.cover)}')"></div>
+          <li><div class="h-cover" style="background-image:url('${esc(coverAt(l.cover, 250))}')"></div>
           <div class="h-text"><div class="h-title">${esc(l.title)}</div><div class="h-sub">${esc(l.artist)}${l.genres?.length ? ` · ${esc(l.genres[0])}` : ''}</div></div></li>`).join('')
           || '<p class="muted">設定で Google のクライアント ID を入れて同期すると、ここに表示されます。</p>'}</ul></div>` },
     { g: YG.i, glow: '#ff6a3d', label: '履歴', sub: 'History', num: s.plays.length, cap: s.plays[0] ? `最新: ${esc(s.plays[0].title)}` : '曲を手動で追加',
       desc: '記録した曲の一覧。× で削除できます',
       detail: () => `<div class="ys-block"><div class="ys-block-head"><h3>最近の記録</h3><button class="link-btn" data-act="add">＋ 手動で追加</button></div>
         <ul class="history">${s.plays.slice(0, 100).map((pl) => `
-          <li><div class="h-cover" style="background-image:url('${esc(pl.cover)}')"></div>
+          <li><div class="h-cover" style="background-image:url('${esc(coverAt(pl.cover, 250))}')"></div>
           <div class="h-text"><div class="h-title">${esc(pl.title)}</div>
           <div class="h-sub">${esc(pl.artist)} · ${fmtWhen(pl.at)}${pl.features?.bpm ? ` · ${pl.features.bpm} BPM` : ''}</div></div>
           <button class="h-del" data-id="${pl.id}" aria-label="削除">×</button></li>`).join('') || '<p class="muted">まだ記録がありません</p>'}</ul></div>` },
@@ -714,8 +714,13 @@ function measureWheel() {
   const dial = $('#dial');
   Object.assign(dial.style, { width: size + 'px', height: size + 'px', marginLeft: -dialR + 'px', top: (pivotY - dialR) + 'px' });
   let ticks = '';
-  for (let k = 0; k < 360; k += 2) {
-    const major = k % 10 === 0;
+  // Ticks follow the card spacing: a long tick every Y_STEP degrees (one per card) with
+  // four short ones between, centred on the needle, so a long tick sits under the
+  // needle whenever the wheel rests on a card.
+  const sub = Y_STEP / 5;
+  for (let j = -Math.floor(180 / sub); j <= Math.floor(180 / sub); j++) {
+    const k = j * sub;
+    const major = j % 5 === 0;
     const a = (k - 90) * Math.PI / 180;
     const r1 = dialR - (major ? 16 : 9);
     ticks += `<line x1="${dialR + Math.cos(a) * r1}" y1="${dialR + Math.sin(a) * r1}" x2="${dialR + Math.cos(a) * dialR}" y2="${dialR + Math.sin(a) * dialR}" stroke="rgba(255,255,255,${major ? 0.55 : 0.22})" stroke-width="${major ? 2 : 1.2}" stroke-linecap="round"/>`;
@@ -750,7 +755,9 @@ function yTick(now) {
     el.tabIndex = Math.round(off) === 0 ? 0 : -1;
   });
   const svg = $('#dial svg');
-  if (svg) svg.style.transform = `rotate(${-yPos * Y_STEP}deg)`;
+  // The tick pattern repeats every card, so only the offset from the nearest card is needed
+  // (this also keeps the seam of the ring at the bottom, out of view).
+  if (svg) svg.style.transform = `rotate(${-(yPos - Math.round(yPos)) * Y_STEP}deg)`;
   const n = yEls.length;
   const f = ((Math.round(yPos) % n) + n) % n;
   if (f !== yShown && yCards[f]) {
@@ -1012,7 +1019,7 @@ $('#manualQuery').addEventListener('input', (e) => {
     try {
       const res = (await deezer.searchTracks(q, 12)).map(fromDeezerTrack);
       $('#manualResults').innerHTML = res.map((t, i) => `
-        <li data-i="${i}"><div class="h-cover" style="background-image:url('${esc(t.cover)}')"></div>
+        <li data-i="${i}"><div class="h-cover" style="background-image:url('${esc(coverAt(t.cover, 250))}')"></div>
         <div class="h-text"><div class="h-title">${esc(t.title)}</div><div class="h-sub">${esc(t.artist)}</div></div><span class="link-btn">追加</span></li>`).join('');
       $('#manualResults').querySelectorAll('li').forEach((li) => li.addEventListener('click', async () => {
         const t = res[+li.dataset.i];

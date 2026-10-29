@@ -36,6 +36,13 @@ export const deezer = {
   track: (id) => jsonp(`/track/${id}`),
 };
 
+// Deezer artwork URLs encode their size (…/1000x1000-000000-80-0-0.jpg). Asking for the
+// size actually shown keeps image memory low; 12 full-size covers can exceed what iOS
+// Safari will paint, leaving covers half-drawn. Other URLs are returned unchanged.
+export function coverAt(url, px = 250) {
+  return url ? url.replace(/\/(\d{2,4})x\1-/, `/${px}x${px}-`) : '';
+}
+
 export function fromDeezerTrack(t) {
   return {
     deezerId: t.id,
