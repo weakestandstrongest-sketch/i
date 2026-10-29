@@ -918,8 +918,17 @@ function showYtStatus(msg) {
 
 // Must be called straight from a tap: the Google sign-in popup needs the user gesture.
 function syncYouTube({ manual = false } = {}) {
-  const clientId = ($('#googleClientId')?.value || store.get().settings.googleClientId || '').trim();
+  // Strip spaces and line breaks that sneak in when copying on a phone.
+  const clientId = ($('#googleClientId')?.value || store.get().settings.googleClientId || '').replace(/\s+/g, '');
   if (!clientId) { if (manual) { toast('設定で Google のクライアント ID を入力してください'); openSheet('#settingsSheet'); } return Promise.resolve(); }
+  if (!/^\d+-[a-z0-9]+\.apps\.googleusercontent\.com$/.test(clientId)) {
+    const msg = clientId.startsWith('GOCSPX-')
+      ? 'これはクライアント シークレットです。「クライアント ID」（….apps.googleusercontent.com）を貼ってください'
+      : 'クライアント ID の形式が違います。「数字-英数字.apps.googleusercontent.com」の全体をコピーしてください';
+    if (manual) { showYtStatus(msg); toast(msg, 5000); }
+    return Promise.resolve();
+  }
+  if ($('#googleClientId')) $('#googleClientId').value = clientId;
   if (ytBusy) return Promise.resolve();
   if (!hasToken() && !manual) return Promise.resolve();   // no silent popups
   store.update((s) => (s.settings.googleClientId = clientId));
