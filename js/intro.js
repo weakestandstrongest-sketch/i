@@ -31,8 +31,10 @@ export function playIntro(root) {
   const button = root.querySelector('#introStart');
 
   const titleChars = split(title);
+  title.classList.add('split');
   const eyebrowChars = split(eyebrow);
   const lineChars = lines.map(split);
+  root.classList.add('ready');
   const repaint = () => paintGradient(title);
   // Measure after fonts load so the gradient slices line up with the real glyphs.
   (document.fonts?.ready || Promise.resolve()).then(repaint);
@@ -77,4 +79,12 @@ export function leaveIntro(root) {
     root.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 600, delay: lettersDone - 150, easing: 'ease-out', fill: 'forwards' })
       .finished.then(finish, finish);
   });
+}
+
+// Runs on its own as soon as this small module loads (it is included before main.js),
+// so the animation never waits for the 3D library that main.js pulls in.
+const root = document.getElementById('intro');
+if (root) {
+  playIntro(root);
+  root.querySelector('#introStart').addEventListener('click', () => leaveIntro(root), { once: true });
 }

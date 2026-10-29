@@ -1,7 +1,6 @@
 import { AudioEngine } from './audio.js';
 import { Visualizer } from './visualizer.js';
 import { SpectrumView } from './spectrum.js';
-import { playIntro, leaveIntro } from './intro.js';
 import { store, trackKey, weekKey, nextWeekStart } from './store.js';
 import { recordClip, identify } from './recognizer.js';
 import { deezer, fromDeezerTrack, pool, coverAt } from './deezer.js';
@@ -62,8 +61,8 @@ function toast(msg, ms = 2600) {
 }
 
 /* ---------------- Intro ---------------- */
-playIntro($('#intro'));
-$('#introStart').addEventListener('click', () => leaveIntro($('#intro')));
+// The opening animation runs from js/intro.js, loaded separately so it starts before
+// the 3D library has downloaded.
 
 /* ---------------- Tabs ---------------- */
 let currentView = 'live';

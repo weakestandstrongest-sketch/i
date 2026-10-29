@@ -31,7 +31,7 @@ block = f'''<script type="importmap">
 
 html = re.sub(r'<script type="importmap">.*?</script>', block, html, count=1, flags=re.S)
 html = re.sub(r'href="styles\.css(\?v=\d+)?"', f'href="styles.css?v={version}"', html)
-html = re.sub(r'src="js/main\.js(\?v=\d+)?"', f'src="js/main.js?v={version}"', html)
+html = re.sub(r'src="js/(\w+)\.js(\?v=\d+)?"', lambda m: f'src="js/{m.group(1)}.js?v={version}"', html)
 if m:
     html = html.replace(m.group(0), f'<meta name="asset-version" content="{version}"')
 else:

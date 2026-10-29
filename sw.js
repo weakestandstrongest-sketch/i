@@ -2,8 +2,8 @@
 // revalidate with the server (no-cache) so the browser's own HTTP cache can't
 // serve a stale file mixed with fresh ones. Asset URLs carry ?v=N (see
 // tools/bump_version.py), which the version below must match.
-const CACHE = 'resonance-assets-v6';
-const V = '?v=6';
+const CACHE = 'resonance-assets-v7';
+const V = '?v=7';
 const SHELL = ['./', 'index.html', 'styles.css' + V, 'manifest.webmanifest',
   ...['main', 'intro', 'audio', 'visualizer', 'spectrum', 'store', 'deezer', 'recognizer', 'recommend', 'lastfm', 'youtube'].map((n) => `js/${n}.js${V}`)];
 

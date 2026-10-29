@@ -56,6 +56,12 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
   filter: blur(40px); animation: breathe 6s ease-in-out infinite; }
 @keyframes breathe { 50% { transform: translate(-50%, -50%) scale(1.12) rotate(20deg); } }
 .intro-inner { position: relative; display: flex; flex-direction: column; align-items: center; }
+/* Hidden until js/intro.js has split the letters, so the plain text never flashes first.
+   If the script can't run, the text still appears after 2.5 s. */
+.intro:not(.ready) .intro-inner { visibility: hidden; animation: intro-fallback 0s 2.5s forwards; }
+@keyframes intro-fallback { to { visibility: visible; } }
+/* Gradient for the unsplit title (fallback); once split, each letter paints its own slice. */
+.hero-title:not(.split) { background: var(--grad); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .title-wrap { position: relative; overflow: hidden; padding: 0 .06em .08em; }
 .sheen { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 48%, transparent 66%); mix-blend-mode: overlay; transform: translateX(-120%); }
 .intro .ch { display: inline-block; will-change: transform, opacity, filter; }
