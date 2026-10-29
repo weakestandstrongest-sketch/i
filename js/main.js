@@ -1,5 +1,6 @@
 import { AudioEngine } from './audio.js';
 import { Visualizer } from './visualizer.js';
+import { SpectrumView } from './spectrum.js';
 import { store, trackKey, weekKey, nextWeekStart } from './store.js';
 import { recordClip, identify } from './recognizer.js';
 import { deezer, fromDeezerTrack, pool } from './deezer.js';
@@ -40,7 +41,10 @@ function loop(t) {
     $('#energyValue').textContent = Math.round(f.level * 100);
     $('#brightValue').textContent = Math.round(f.centroid * 100);
   }
-  if (meterOn && frameN % 2 === 0) updateMeter(f);
+  if (spectrumOn && currentView === 'live') {
+    spectrum.draw(engine.freq, engine.ctx ? engine.ctx.sampleRate / 2 : 24000, f, t, engine.mode !== 'idle');
+    if (frameN % 6 === 0) $('#specReadout').textContent = spectrum.readout || (engine.mode === 'idle' ? 'マイクをオンにすると表示されます' : '');
+  }
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -759,7 +763,7 @@ $('#openSettings').addEventListener('click', () => {
     $('#' + id).value = String(st[id] ?? 1);
     $('#' + id + 'Value').textContent = Number(st[id] ?? 1).toFixed(1);
   }
-  $('#showMeter').checked = !!st.showMeter;
+  $('#showSpectrum').checked = st.showSpectrum !== false;
   showLastfmStatus();
   showYtStatus();
   preloadGoogle();
@@ -776,23 +780,28 @@ $('#closeSettings').addEventListener('click', () => {
   closeSheets();
   syncLastfm();
 });
-// Band meter: sustained level as bar height, onsets light up the label.
-let meterOn = !!store.get().settings.showMeter;
-const meterEls = {};
-document.querySelectorAll('.bm').forEach((el) => (meterEls[el.dataset.b] = el));
-$('#bandMeter').hidden = !meterOn;
-function updateMeter(f) {
-  for (const b of ['bass', 'mid', 'treble']) {
-    const el = meterEls[b];
-    el.style.setProperty('--v', f[b].toFixed(3));
-    el.classList.toggle('hit', f[b + 'Hit'] > 0.35);
-  }
+// Keep the sphere centred in the open space between the numbers and the bottom panel.
+function fitStage() {
+  if (!viz) return;
+  const top = $('#liveMetrics').getBoundingClientRect().bottom;
+  const bottom = $('#liveBottom').getBoundingClientRect().top;
+  viz.setFocus(top, bottom);
 }
-$('#showMeter').addEventListener('change', (e) => {
-  meterOn = e.target.checked;
-  $('#bandMeter').hidden = !meterOn;
-  store.update((s) => (s.settings.showMeter = meterOn));
+addEventListener('resize', fitStage);
+requestAnimationFrame(fitStage);
+
+// Spectrum analyser under the sphere.
+let spectrumOn = store.get().settings.showSpectrum !== false;
+const spectrum = new SpectrumView($('#spectrum'));
+$('#spectrumBox').hidden = !spectrumOn;
+$('#showSpectrum').addEventListener('change', (e) => {
+  spectrumOn = e.target.checked;
+  $('#spectrumBox').hidden = !spectrumOn;
+  if (spectrumOn) spectrum.resize();
+  fitStage();
+  store.update((s) => (s.settings.showSpectrum = spectrumOn));
 });
+
 for (const [id, key, band] of [['sensBass', 'sensBass', 'bass'], ['sensMid', 'sensMid', 'mid'], ['sensTreble', 'sensTreble', 'treble']]) {
   $('#' + id).addEventListener('input', (e) => {
     const v = Number(e.target.value);

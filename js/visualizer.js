@@ -90,6 +90,8 @@ export class Visualizer {
     this.needlePeak = [];
     this.pendingWaves = [];
     this.lowPower = false;
+    this.focus = null;      // screen band (px) the core should sit in, set by the page layout
+    this.baseZ = 12;
 
     const maxPr = Math.min(window.devicePixelRatio || 1, 2);
     this.qLevel = QUALITY.findIndex((q) => q.pr <= maxPr);
@@ -421,6 +423,24 @@ export class Visualizer {
     } else { this.slowSince = 0; this.fastSince = 0; }
   }
 
+  // Centre the core in the open space between the top numbers and the bottom panel,
+  // and pull the camera back when that space is small (e.g. iPhone SE).
+  setFocus(top, bottom) {
+    this.focus = { top, bottom };
+    this._frame();
+  }
+
+  _frame() {
+    const w = window.innerWidth, h = window.innerHeight;
+    if (!this.focus || !h) { this.camera.clearViewOffset(); this.baseZ = w < h ? 12 : 9; return; }
+    const freeH = Math.max(120, this.focus.bottom - this.focus.top);
+    const centreY = (this.focus.top + this.focus.bottom) / 2;
+    this.camera.setViewOffset(w, h, 0, h / 2 - centreY, w, h);
+    // Core radius (~1.7 incl. swell) should span about 36 % of the free height.
+    const tanHalf = Math.tan(THREE.MathUtils.degToRad(this.camera.fov / 2));
+    this.baseZ = clamp((1.7 * h) / (0.72 * freeH * tanHalf), 8, 22);
+  }
+
   resize() {
     if (!this.composer) return;
     const w = window.innerWidth, h = window.innerHeight;
@@ -429,6 +449,7 @@ export class Visualizer {
     this.composer.setSize(w, h);
     this.bloom.resolution.set(w * this.bloomScale, h * this.bloomScale);
     this.camera.aspect = w / h;
+    this._frame();
     this.camera.updateProjectionMatrix();
   }
 
@@ -612,16 +633,18 @@ export class Visualizer {
     this.cam.punch *= halfLife(dt, hlKick * 1.2);
     this.cam.shake *= halfLife(dt, hlKick * 0.7);
     this.cam.orbit += (0.05 + 0.12 * tempo * act) * dt;
-    const portrait = window.innerWidth < window.innerHeight;
-    const baseZ = portrait ? 12 : 9;
-    const sh = this.cam.shake;
+    const baseZ = this.baseZ;
+    const zs = baseZ / 12;          // keep orbit and punch proportional to the framing distance
+    const sh = this.cam.shake * zs;
     this.camera.position.set(
-      Math.sin(this.cam.orbit) * 2.0 + (Math.random() - 0.5) * sh,
-      0.4 + Math.cos(this.cam.orbit * 0.8) * 0.9 + (Math.random() - 0.5) * sh,
-      baseZ - f.bass * 0.6 - this.cam.punch * 0.8,
+      (Math.sin(this.cam.orbit) * 2.0 + (Math.random() - 0.5) * sh) * zs,
+      (0.4 + Math.cos(this.cam.orbit * 0.8) * 0.9) * zs + (Math.random() - 0.5) * sh,
+      baseZ - (f.bass * 0.6 + this.cam.punch * 0.8) * zs,
     );
-    // Portrait: aim below the core so it floats in the upper half, clear of the controls.
-    this.camera.lookAt(0, portrait ? -2.2 : -0.6, 0);
+    // The view offset (see _frame) places the core in the open space; without a layout
+    // hint, aim below the core so it floats in the upper half.
+    const portrait = window.innerWidth < window.innerHeight;
+    this.camera.lookAt(0, this.focus ? 0 : portrait ? -2.2 : -0.6, 0);
 
     this.bloom.strength = Math.min(1.0, 0.35 + this.env.kick * 0.25 + this.env.treb * 0.15 + f.level * 0.2);
     if (this.bloom.enabled) this.composer.render();
