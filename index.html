@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="asset-version" content="4" />
+  <meta name="asset-version" content="6" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=4" />
+  <link rel="stylesheet" href="styles.css?v=6" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" />
   <link rel="apple-touch-icon" href="icon.svg" />
@@ -20,16 +20,17 @@
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-        "./js/audio.js": "./js/audio.js?v=4",
-        "./js/deezer.js": "./js/deezer.js?v=4",
-        "./js/lastfm.js": "./js/lastfm.js?v=4",
-        "./js/main.js": "./js/main.js?v=4",
-        "./js/recognizer.js": "./js/recognizer.js?v=4",
-        "./js/recommend.js": "./js/recommend.js?v=4",
-        "./js/spectrum.js": "./js/spectrum.js?v=4",
-        "./js/store.js": "./js/store.js?v=4",
-        "./js/visualizer.js": "./js/visualizer.js?v=4",
-        "./js/youtube.js": "./js/youtube.js?v=4"
+        "./js/audio.js": "./js/audio.js?v=6",
+        "./js/deezer.js": "./js/deezer.js?v=6",
+        "./js/intro.js": "./js/intro.js?v=6",
+        "./js/lastfm.js": "./js/lastfm.js?v=6",
+        "./js/main.js": "./js/main.js?v=6",
+        "./js/recognizer.js": "./js/recognizer.js?v=6",
+        "./js/recommend.js": "./js/recommend.js?v=6",
+        "./js/spectrum.js": "./js/spectrum.js?v=6",
+        "./js/store.js": "./js/store.js?v=6",
+        "./js/visualizer.js": "./js/visualizer.js?v=6",
+        "./js/youtube.js": "./js/youtube.js?v=6"
       }
     }
   </script>
@@ -42,8 +43,8 @@
     <div class="intro-glow"></div>
     <div class="intro-inner">
       <p class="eyebrow">Introducing</p>
-      <h1 class="hero-title"><span class="grad-text">Resonance.</span></h1>
-      <p class="hero-sub">音が、空間になる。<br />あなたの音楽が、次の一曲を連れてくる。</p>
+      <div class="title-wrap"><h1 class="hero-title">Resonance.</h1><span class="sheen" aria-hidden="true"></span></div>
+      <p class="hero-sub"><span class="line">音が、空間になる。</span><span class="line">あなたの音楽が、次の一曲を連れてくる。</span></p>
       <button id="introStart" class="btn-primary">はじめる</button>
     </div>
   </section>
@@ -268,6 +269,6 @@
   <div class="toast" id="toast" hidden></div>
   <audio id="previewAudio" preload="none"></audio>
 
-  <script type="module" src="js/main.js?v=4"></script>
+  <script type="module" src="js/main.js?v=6"></script>
 </body>
 </html>

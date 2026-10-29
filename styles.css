@@ -51,15 +51,21 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 
 /* ---------- Intro ---------- */
 .intro { position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; background: #000; transition: opacity 1s ease, transform 1.2s cubic-bezier(.2,.8,.2,1); text-align: center; padding: 24px; }
-.intro.leave { opacity: 0; transform: scale(1.08); pointer-events: none; }
 .intro-glow { position: absolute; width: 140vmax; height: 140vmax; left: 50%; top: 58%; transform: translate(-50%, -50%);
   background: radial-gradient(closest-side, rgba(255,45,122,.55), rgba(139,61,255,.35) 40%, rgba(43,217,255,.12) 62%, transparent 72%);
   filter: blur(40px); animation: breathe 6s ease-in-out infinite; }
 @keyframes breathe { 50% { transform: translate(-50%, -50%) scale(1.12) rotate(20deg); } }
-.intro-inner { position: relative; animation: rise 1.4s cubic-bezier(.2,.8,.2,1) both; }
+.intro-inner { position: relative; display: flex; flex-direction: column; align-items: center; }
+.title-wrap { position: relative; overflow: hidden; padding: 0 .06em .08em; }
+.sheen { position: absolute; inset: 0; pointer-events: none; background: linear-gradient(100deg, transparent 30%, rgba(255,255,255,.55) 48%, transparent 66%); mix-blend-mode: overlay; transform: translateX(-120%); }
+.intro .ch { display: inline-block; will-change: transform, opacity, filter; }
+.intro .space { display: inline-block; width: .3em; }
+/* Each title letter paints its own slice of the gradient (positions set in js/intro.js). */
+.hero-title .ch { background-image: var(--grad); background-repeat: no-repeat; -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero-sub .line { display: block; white-space: nowrap; }
 @keyframes rise { from { opacity: 0; transform: translateY(30px); filter: blur(10px); } }
-.hero-title { margin: 0; font-size: clamp(56px, 16vw, 132px); font-weight: 700; letter-spacing: -0.045em; line-height: 0.95; }
-.hero-sub { margin: 22px auto 40px; max-width: 30ch; font-size: 19px; line-height: 1.55; color: var(--fg-dim); font-weight: 400; }
+.hero-title { margin: 0; white-space: nowrap; font-size: clamp(44px, 14vw, 132px); font-weight: 700; letter-spacing: -0.045em; line-height: 0.95; }
+.hero-sub { margin: 22px auto 40px; font-size: clamp(14px, 4.1vw, 19px); line-height: 1.55; color: var(--fg-dim); font-weight: 400; }
 
 .btn-primary { background: var(--accent); color: #fff; padding: 16px 34px; border-radius: 999px; font-size: 17px; font-weight: 600; box-shadow: 0 10px 40px rgba(47,123,255,.45); transition: transform .2s ease; }
 .btn-primary:active { transform: scale(0.96); }

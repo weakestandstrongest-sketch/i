@@ -1,6 +1,7 @@
 import { AudioEngine } from './audio.js';
 import { Visualizer } from './visualizer.js';
 import { SpectrumView } from './spectrum.js';
+import { playIntro, leaveIntro } from './intro.js';
 import { store, trackKey, weekKey, nextWeekStart } from './store.js';
 import { recordClip, identify } from './recognizer.js';
 import { deezer, fromDeezerTrack, pool, coverAt } from './deezer.js';
@@ -61,10 +62,8 @@ function toast(msg, ms = 2600) {
 }
 
 /* ---------------- Intro ---------------- */
-$('#introStart').addEventListener('click', () => {
-  $('#intro').classList.add('leave');
-  setTimeout(() => $('#intro').remove(), 1200);
-});
+playIntro($('#intro'));
+$('#introStart').addEventListener('click', () => leaveIntro($('#intro')));
 
 /* ---------------- Tabs ---------------- */
 let currentView = 'live';
