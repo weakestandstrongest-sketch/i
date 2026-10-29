@@ -913,7 +913,8 @@ function showYtStatus(msg) {
   const s = store.get();
   const el = $('#ytStatus');
   if (!el) return;
-  el.textContent = msg || (s.settings.ytSyncedAt ? `最終同期: ${fmtWhen(s.settings.ytSyncedAt)} · 高評価 ${s.ytLikes.length} 曲` : '');
+  el.textContent = msg || (s.settings.ytSyncedAt
+    ? `最終同期: ${fmtWhen(s.settings.ytSyncedAt)} · 高評価 ${s.settings.ytScanned ? `${s.settings.ytScanned} 本のうち音楽 ` : ''}${s.ytLikes.length} 曲` : '');
 }
 
 // Must be called straight from a tap: the Google sign-in popup needs the user gesture.
@@ -938,19 +939,22 @@ function syncYouTube({ manual = false } = {}) {
   return ready
     .then(async () => {
       showYtStatus('高評価を読み込んでいます…');
-      const likes = await fetchLikes();
+      const { likes, scanned } = await fetchLikes((n, m) => showYtStatus(`高評価を読み込んでいます…（${n} 本中 音楽 ${m} 曲）`));
       const known = new Map(store.get().ytLikes.map((l) => [l.videoId, l]));
       const fresh = likes.filter((l) => !known.has(l.videoId));
-      showYtStatus(`曲を照合しています…（${fresh.length} 曲）`);
-      await enrichLikes(fresh);
       const next = likes.map((l) => known.get(l.videoId) || l);
+      // Match on Deezer in batches: new likes plus any older ones not tried yet.
+      const pending = next.filter((l) => !l.tried && !l.deezerId);
+      await enrichLikes(pending, (d, n) => showYtStatus(`曲を照合しています…（${d} / ${n}）`));
       const removed = known.size - (next.length - fresh.length);
       store.update((s) => {
         s.ytLikes = next;   // unliked songs drop out
         s.settings.ytSyncedAt = Date.now();
+        s.settings.ytScanned = scanned;
       });
-      showYtStatus();
-      toast(fresh.length ? `YouTube Music の高評価を ${fresh.length} 曲取り込みました` : removed > 0 ? '高評価の変更を反映しました' : '新しい高評価はありませんでした');
+      const left = next.filter((l) => !l.tried && !l.deezerId).length;
+      showYtStatus(left ? `残り ${left} 曲は次回の同期で照合します` : undefined);
+      toast(fresh.length ? `YouTube Music の高評価を ${fresh.length} 曲取り込みました（${scanned} 本を確認）` : removed > 0 ? '高評価の変更を反映しました' : '新しい高評価はありませんでした');
       if (fresh.length) refreshThinWeek();
       if (ysOpen) { yCards = buildYouCards(store.get()); fillYouSheet(ysIdx); }
       else if (currentView === 'you') renderYou();

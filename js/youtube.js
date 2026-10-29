@@ -6,8 +6,8 @@ import { trackKey } from './store.js';
 
 const GSI_SRC = 'https://accounts.google.com/gsi/client';
 const SCOPE = 'https://www.googleapis.com/auth/youtube.readonly';
-const MAX_PAGES = 20;      // 50 likes per page
-const MAX_ENRICH = 100;    // Deezer lookups per sync
+const MAX_PAGES = 100;     // 50 likes per page, up to 5,000 (YouTube's own cap on liked videos)
+const MAX_ENRICH = 200;    // Deezer lookups per sync; the rest are matched on later syncs
 
 let gsiReady = null;
 let token = null;          // { value, expires }
@@ -92,29 +92,43 @@ export function parseVideo(title, channel) {
   return { artist, title: clean(title) };
 }
 
+// Music videos are often filed under other categories, so also trust typical MV titles.
+const MUSIC_TITLE = /(official\s*(music\s*)?video|music\s*video|official\s*audio|lyric|\bM\/?V\b|\bPV\b|「.+」|『.+』|歌ってみた|covered by|feat\.|ft\.)/i;
+const isMusicVideo = (sn) => sn.categoryId === '10'
+  || / - Topic$/.test(sn.channelTitle || '')
+  || /VEVO$/i.test(sn.channelTitle || '')
+  || MUSIC_TITLE.test(sn.title || '');
+
 // All liked music videos (YouTube Music likes are YouTube likes).
-export async function fetchLikes() {
+// Returns { likes, scanned } where scanned counts every liked video read.
+export async function fetchLikes(onProgress) {
   const out = [];
   let pageToken = '';
+  let scanned = 0;
   for (let i = 0; i < MAX_PAGES; i++) {
     const json = await api('videos', { part: 'snippet', myRating: 'like', maxResults: 50, ...(pageToken ? { pageToken } : {}) });
     for (const v of json.items || []) {
+      scanned++;
       const sn = v.snippet || {};
-      const isMusic = sn.categoryId === '10' || / - Topic$/.test(sn.channelTitle || '');
-      if (!isMusic) continue;
+      if (!isMusicVideo(sn)) continue;
       const { artist, title } = parseVideo(sn.title || '', sn.channelTitle || '');
       if (!title) continue;
       out.push({ videoId: v.id, title, artist, cover: sn.thumbnails?.high?.url || sn.thumbnails?.medium?.url || '' });
     }
+    onProgress?.(scanned, out.length);
     pageToken = json.nextPageToken;
     if (!pageToken) break;
   }
-  return out;
+  return { likes: out, scanned };
 }
 
 // Adds Deezer ids, artwork and genres, like Last.fm imports.
-export async function enrichLikes(likes) {
-  await pool(likes.slice(0, MAX_ENRICH), 4, async (l) => {
+export async function enrichLikes(likes, onProgress) {
+  let done = 0;
+  const batch = likes.slice(0, MAX_ENRICH);
+  await pool(batch, 4, async (l) => {
+    l.tried = true;   // matched or not, don't look it up again
+    onProgress?.(++done, batch.length);
     const hit = (await deezer.searchTracks(`artist:"${l.artist}" track:"${l.title}"`, 1))[0]
       || (await deezer.searchTracks(`${l.artist} ${l.title}`, 1))[0];
     if (!hit) return;
