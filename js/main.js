@@ -301,7 +301,9 @@ const TINTS = [
 function buildCarousel() {
   const n = weekTracks.length;
   const step = 360 / n;
-  const radius = Math.round((250 / 2) / Math.tan(Math.PI / n));
+  // Ring radius from the card width set in CSS (larger cards on wide screens).
+  const cardW = parseFloat(getComputedStyle($('.carousel-wrap')).getPropertyValue('--card-w')) || 230;
+  const radius = Math.round(((cardW + 20) / 2) / Math.tan(Math.PI / n));
   const s = store.get();
   const el = $('#carousel');
   el.innerHTML = weekTracks.map((t, i) => `
@@ -523,6 +525,34 @@ function endDrag() {
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
 
+// Wide screens switch card size at a breakpoint; rebuild the ring so the radius follows.
+let lastCardW = 0;
+addEventListener('resize', () => {
+  const w = parseFloat(getComputedStyle($('.carousel-wrap')).getPropertyValue('--card-w')) || 230;
+  if (w !== lastCardW) { lastCardW = w; if (weekTracks.length) buildCarousel(); }
+});
+
+// PC: arrow keys and horizontal trackpad scrolling turn the ring.
+addEventListener('keydown', (e) => {
+  if (currentView !== 'discover' || !weekTracks.length || e.target.closest?.('input, textarea, select')) return;
+  if (e.key === 'ArrowRight') { e.preventDefault(); snapTo((focusIdx + 1) % weekTracks.length); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); snapTo((focusIdx - 1 + weekTracks.length) % weekTracks.length); }
+  if (e.key === ' ' && document.activeElement === document.body) { e.preventDefault(); togglePreview(); }
+});
+let wheelAcc = 0, wheelLock = 0;
+wrap.addEventListener('wheel', (e) => {
+  const dx = Math.abs(e.deltaX) > Math.abs(e.deltaY) ? e.deltaX : e.shiftKey ? e.deltaY : 0;
+  if (!dx || !weekTracks.length) return;
+  e.preventDefault();
+  wheelAcc += dx;
+  const now = performance.now();
+  if (Math.abs(wheelAcc) > 40 && now > wheelLock) {
+    snapTo((focusIdx + (wheelAcc > 0 ? 1 : -1) + weekTracks.length) % weekTracks.length);
+    wheelAcc = 0;
+    wheelLock = now + 260;
+  }
+}, { passive: false });
+
 function renderPastWeeks() {
   const s = store.get();
   const wk = weekKey();
@@ -671,7 +701,8 @@ const wheel = $('#wheel');
 const Y_STEP = 19;   // degrees between cards on the arc
 let yCards = [], yEls = [];
 let yR = 520, yTop = 18;
-const Y_CARD_H = 252;
+// Card height comes from CSS (larger on wide screens), so the dial geometry follows it.
+const yCardH = () => yEls[0]?.offsetHeight || 252;
 let yPos = 0, yTarget = 0, yVel = 0, yDragging = false, yStartX = 0, yStartPos = 0, yLastX = 0, yMoved = false;
 let yIntro = 0, yLoop = false, yShown = -1;
 let ysOpen = false, ysIdx = -1;
@@ -705,6 +736,7 @@ function measureWheel() {
   yR = Math.max(420, Math.min(700, w * 1.25));
   yTop = Math.max(14, h * 0.1);
   yEls.forEach((el) => (el.style.top = yTop + 'px'));
+  const Y_CARD_H = yCardH();
   const pivotY = yTop + Y_CARD_H / 2 + yR;
   // A ring of ticks concentric with the fan, peeking up under the cards.
   const dialR = yR - Y_CARD_H / 2 - 34;
@@ -802,6 +834,26 @@ addEventListener('keydown', (e) => {
 /* Expand: grow from the card's rectangle to full screen, then reveal the detail. */
 const ysheet = $('#ysheet');
 const ysClip = (r) => `inset(${r.top}px ${innerWidth - r.right}px ${innerHeight - r.bottom}px ${r.left}px round 26px)`;
+// Full screen on phones; on wide screens the card opens as a centred panel over a dimmed backdrop.
+function sheetBox() {
+  if (innerWidth < 1024) return { x: 0, y: 0, round: 0 };
+  const w = Math.min(820, innerWidth - 96), h = Math.min(860, innerHeight - 80);
+  return { x: (innerWidth - w) / 2, y: (innerHeight - h) / 2, round: 32 };
+}
+const boxClip = (b) => `inset(${b.y}px ${b.x}px ${b.y}px ${b.x}px round ${b.round}px)`;
+function applySheetBox(b) {
+  ysheet.style.setProperty('--sx', b.x + 'px');
+  ysheet.style.setProperty('--sy', b.y + 'px');
+}
+const ysBackdrop = $('#ysBackdrop');
+addEventListener('resize', () => {
+  if (!ysOpen || !ysheet.classList.contains('ready')) return;
+  const b = sheetBox();
+  applySheetBox(b);
+  ysheet.getAnimations().forEach((a) => a.cancel());
+  ysheet.style.clipPath = boxClip(b);
+});
+ysBackdrop.addEventListener('click', () => closeYouCard());
 
 function fillYouSheet(i) {
   const c = yCards[i];
@@ -817,8 +869,13 @@ function openYouCard(i, viaKey = false) {
   $('#ysheetBg').style.background = yCards[i].g;
   fillYouSheet(i);
   $('#ysheetBody').scrollTop = 0;
+  const box = sheetBox();
+  applySheetBox(box);
+  ysheet.style.clipPath = '';
   ysheet.classList.add('open');
-  const anim = ysheet.animate([{ clipPath: ysClip(rect) }, { clipPath: 'inset(0px 0px 0px 0px round 0px)' }],
+  ysBackdrop.hidden = box.round === 0;
+  if (!ysBackdrop.hidden) ysBackdrop.animate([{ opacity: 0 }, { opacity: 1 }], { duration: reducedMotion ? 1 : 400, fill: 'forwards' });
+  const anim = ysheet.animate([{ clipPath: ysClip(rect) }, { clipPath: boxClip(box) }],
     { duration: reducedMotion ? 1 : 620, easing: 'cubic-bezier(.2,.9,.2,1)', fill: 'forwards' });
   anim.onfinish = () => { ysheet.classList.add('ready'); if (viaKey) $('#ysClose').focus(); };
 }
@@ -829,9 +886,14 @@ function closeYouCard() {
   const el = yEls[ysIdx];
   el.style.visibility = 'visible';
   const rect = el.getBoundingClientRect();
-  const anim = ysheet.animate([{ clipPath: 'inset(0px 0px 0px 0px round 0px)' }, { clipPath: ysClip(rect) }],
+  const box = sheetBox();
+  ysheet.getAnimations().forEach((a) => a.cancel());
+  ysheet.style.clipPath = '';
+  const anim = ysheet.animate([{ clipPath: boxClip(box) }, { clipPath: ysClip(rect) }],
     { duration: reducedMotion ? 1 : 480, easing: 'cubic-bezier(.4,0,.2,1)', fill: 'forwards', delay: reducedMotion ? 0 : 80 });
+  if (!ysBackdrop.hidden) ysBackdrop.animate([{ opacity: 1 }, { opacity: 0 }], { duration: reducedMotion ? 1 : 480, delay: reducedMotion ? 0 : 80, fill: 'forwards' });
   anim.onfinish = () => {
+    ysBackdrop.hidden = true;
     ysheet.classList.remove('open');
     ysOpen = false;
     renderYou();   // pick up edits made inside the sheet (deletes, manual adds)

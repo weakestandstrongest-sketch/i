@@ -146,9 +146,9 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 @keyframes blink { 50% { opacity: .3; } }
 
 /* 3D curved carousel */
-.carousel-wrap { position: relative; height: 430px; margin: 10px -20px 0; perspective: 1100px; perspective-origin: 50% 45%; touch-action: pan-y; overflow: hidden; }
+.carousel-wrap { --card-w: 230px; position: relative; height: 430px; margin: 10px -20px 0; perspective: 1100px; perspective-origin: 50% 45%; touch-action: pan-y; overflow: hidden; }
 .carousel { position: absolute; left: 50%; top: 20px; width: 0; height: 0; transform-style: preserve-3d; will-change: transform; }
-.card { position: absolute; left: -115px; top: 0; width: 230px; height: 340px; border-radius: 30px; overflow: hidden; transform-style: preserve-3d; backface-visibility: hidden; -webkit-backface-visibility: hidden; cursor: pointer; transition: box-shadow .4s, filter .4s; box-shadow: 0 30px 60px rgba(0,0,0,.55); }
+.card { position: absolute; left: calc(var(--card-w) / -2); top: 0; width: var(--card-w); height: calc(var(--card-w) * 1.48); border-radius: 30px; overflow: hidden; transform-style: preserve-3d; backface-visibility: hidden; -webkit-backface-visibility: hidden; cursor: pointer; transition: box-shadow .4s, filter .4s; box-shadow: 0 30px 60px rgba(0,0,0,.55); }
 .card-bg { position: absolute; inset: -30%; background-size: cover; background-position: center; filter: blur(30px) saturate(2.2) brightness(1.05); transform: scale(1.2); }
 .card-tint { position: absolute; inset: 0; mix-blend-mode: soft-light; opacity: .9; }
 .card-sheen { position: absolute; inset: 0; background: linear-gradient(115deg, rgba(255,255,255,.35) 0%, transparent 32%, transparent 70%, rgba(255,255,255,.12) 100%); }
@@ -221,9 +221,10 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 .ysheet.open { display: block; }
 .ysheet-bg { position: absolute; inset: 0; }
 .ysheet-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(0,0,0,.35)); }
-.ysheet-body { position: absolute; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(var(--safe-t) + 74px) 22px calc(var(--safe-b) + 40px); opacity: 0; transform: translateY(14px); transition: opacity .35s ease, transform .45s cubic-bezier(.2,.8,.2,1); max-width: 720px; margin: 0 auto; }
+.ysheet-body { position: absolute; inset: var(--sy, 0px) var(--sx, 0px); overflow-y: auto; -webkit-overflow-scrolling: touch; padding: calc(var(--safe-t) + 74px) 22px calc(var(--safe-b) + 40px); opacity: 0; transform: translateY(14px); transition: opacity .35s ease, transform .45s cubic-bezier(.2,.8,.2,1); max-width: 720px; margin: 0 auto; }
 .ysheet.ready .ysheet-body { opacity: 1; transform: none; }
-.ys-top { position: absolute; z-index: 2; top: calc(var(--safe-t) + 16px); left: 16px; right: 16px; display: flex; justify-content: space-between; opacity: 0; transition: opacity .3s ease .1s; }
+.ys-backdrop { position: fixed; inset: 0; z-index: 24; background: rgba(0,0,0,.55); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.ys-top { position: absolute; z-index: 2; top: calc(var(--sy, 0px) + var(--safe-t) + 16px); left: calc(var(--sx, 0px) + 16px); right: calc(var(--sx, 0px) + 16px); display: flex; justify-content: space-between; opacity: 0; transition: opacity .3s ease .1s; }
 .ysheet.ready .ys-top { opacity: 1; }
 .ys-btn { width: 44px; height: 44px; border-radius: 50%; background: rgba(0,0,0,.22); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); display: grid; place-items: center; font-size: 18px; }
 .ys-kicker { font-size: 13px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: rgba(255,255,255,.78); margin: 0; }
@@ -331,6 +332,29 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
   .mic-btn { width: 58px; height: 58px; }
   .mic-btn svg { width: 24px; height: 24px; }
   .pill { width: 40px; height: 40px; }
+}
+
+/* ---------- Wide screens (PC / tablet landscape) ---------- */
+@media (min-width: 1024px) {
+  /* Discover: text and actions on the left, a larger card ring on the right. */
+  .discover-scroll { max-width: 1280px; padding-left: 48px; padding-right: 48px; }
+  .discover-grid { display: grid; grid-template-columns: minmax(320px, 400px) 1fr; grid-template-areas: "head stage" "focus stage" "regen stage"; grid-template-rows: auto auto 1fr; column-gap: 40px; align-items: start; }
+  .discover-grid > .page-head { grid-area: head; margin-bottom: 18px; }
+  .discover-grid .page-title { font-size: clamp(48px, 4.6vw, 62px); }
+  .discover-grid > .carousel-wrap { grid-area: stage; --card-w: 280px; height: min(640px, calc(100vh - 160px)); min-height: 520px; margin: 0; perspective: 1400px; }
+  .discover-grid > .carousel-wrap .carousel { top: 50%; margin-top: calc(var(--card-w) * -0.74); }
+  .discover-grid > .focus-panel { grid-area: focus; text-align: left; padding: 8px 0 0; }
+  .discover-grid > .regen-row { grid-area: regen; justify-content: flex-start; margin-top: 22px; }
+  .focus-title { font-size: 32px; }
+  .focus-actions, .open-links { justify-content: flex-start; }
+  .card-num { font-size: 132px; }
+  .carousel-empty { padding: 0 60px; }
+
+  /* You: the dial and glow span the whole width; cards a little larger. */
+  .you { max-width: none; }
+  .you-head { padding-left: max(48px, calc((100vw - 1180px) / 2)); }
+  .ycard { width: 216px; height: 292px; margin-left: -108px; }
+  .yc-num { font-size: 84px; }
 }
 
 @media (min-width: 900px) {

@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
-  <meta name="asset-version" content="7" />
+  <meta name="asset-version" content="8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
   <meta name="theme-color" content="#000000" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -11,7 +11,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="styles.css?v=7" />
+  <link rel="stylesheet" href="styles.css?v=8" />
   <link rel="manifest" href="manifest.webmanifest" />
   <link rel="icon" href="icon.svg" />
   <link rel="apple-touch-icon" href="icon.svg" />
@@ -20,17 +20,17 @@
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
         "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
-        "./js/audio.js": "./js/audio.js?v=7",
-        "./js/deezer.js": "./js/deezer.js?v=7",
-        "./js/intro.js": "./js/intro.js?v=7",
-        "./js/lastfm.js": "./js/lastfm.js?v=7",
-        "./js/main.js": "./js/main.js?v=7",
-        "./js/recognizer.js": "./js/recognizer.js?v=7",
-        "./js/recommend.js": "./js/recommend.js?v=7",
-        "./js/spectrum.js": "./js/spectrum.js?v=7",
-        "./js/store.js": "./js/store.js?v=7",
-        "./js/visualizer.js": "./js/visualizer.js?v=7",
-        "./js/youtube.js": "./js/youtube.js?v=7"
+        "./js/audio.js": "./js/audio.js?v=8",
+        "./js/deezer.js": "./js/deezer.js?v=8",
+        "./js/intro.js": "./js/intro.js?v=8",
+        "./js/lastfm.js": "./js/lastfm.js?v=8",
+        "./js/main.js": "./js/main.js?v=8",
+        "./js/recognizer.js": "./js/recognizer.js?v=8",
+        "./js/recommend.js": "./js/recommend.js?v=8",
+        "./js/spectrum.js": "./js/spectrum.js?v=8",
+        "./js/store.js": "./js/store.js?v=8",
+        "./js/visualizer.js": "./js/visualizer.js?v=8",
+        "./js/youtube.js": "./js/youtube.js?v=8"
       }
     }
   </script>
@@ -105,7 +105,8 @@
 
   <!-- DISCOVER -->
   <section id="view-discover" class="view" data-view="discover">
-    <div class="scroll">
+    <div class="scroll discover-scroll">
+      <div class="discover-grid">
       <header class="page-head">
         <p class="eyebrow" id="weekLabel">Week —</p>
         <h2 class="page-title">This Week's<br /><span class="grad-text">Discoveries.</span></h2>
@@ -139,6 +140,7 @@
 
       <div class="regen-row">
         <button class="btn-glass" id="regenBtn">今週の提案を作り直す</button>
+      </div>
       </div>
 
       <section class="past-weeks" id="pastWeeks"></section>
@@ -257,6 +259,7 @@
     <button class="btn-glass block-btn" id="closeManual">閉じる</button>
   </div>
 
+  <div class="ys-backdrop" id="ysBackdrop" hidden></div>
   <div class="ysheet" id="ysheet" role="dialog" aria-modal="true" aria-labelledby="ysTitle">
     <div class="ysheet-bg" id="ysheetBg"></div>
     <div class="ys-top">
@@ -269,7 +272,7 @@
   <div class="toast" id="toast" hidden></div>
   <audio id="previewAudio" preload="none"></audio>
 
-  <script type="module" src="js/intro.js?v=7"></script>
-  <script type="module" src="js/main.js?v=7"></script>
+  <script type="module" src="js/intro.js?v=8"></script>
+  <script type="module" src="js/main.js?v=8"></script>
 </body>
 </html>
