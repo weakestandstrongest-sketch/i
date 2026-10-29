@@ -33,7 +33,7 @@ export class AudioEngine {
     this.source = null;
     this.stream = null;
     this.fileEl = null;
-    this.mode = 'idle'; // idle | mic | file
+    this.mode = 'idle'; // idle | mic | tab | file
     this.freq = new Uint8Array(1024);
 
     this.f = {
@@ -88,6 +88,16 @@ export class AudioEngine {
     this.source = this.ctx.createMediaStreamSource(this.stream);
     this.source.connect(this.analyser);
     this.mode = 'mic';
+  }
+
+  // Any live audio stream, e.g. a shared browser tab or system audio on a PC.
+  startStream(stream, mode = 'tab') {
+    this._ensureCtx();
+    this.stop();
+    this.stream = stream;
+    this.source = this.ctx.createMediaStreamSource(stream);
+    this.source.connect(this.analyser);   // analysis only: the sound already plays in the other app
+    this.mode = mode;
   }
 
   startFile(file) {
@@ -161,7 +171,7 @@ export class AudioEngine {
     let num = 0, den = 0;
     for (let i = 1; i < top; i++) { num += i * freq[i]; den += freq[i]; }
     const centroid = den > 0 ? Math.min(1, (num / den) / idx(5000)) : 0;
-    f.centroid += (centroid - f.centroid) * 0.05 * k60;
+    f.centroid += (centroid - f.centroid) * Math.min(1, 0.05 * k60);
 
     let rawLevel = 0;
     const z = {};   // how far each band's flux is above its usual (in standard deviations)
@@ -255,7 +265,7 @@ export class AudioEngine {
       st.n++;
     }
 
-    f.level += (f.bass * 0.45 + f.mid * 0.4 + f.treble * 0.15 - f.level) * 0.3 * k60;
+    f.level += (f.bass * 0.45 + f.mid * 0.4 + f.treble * 0.15 - f.level) * Math.min(1, 0.3 * k60);
     // Back-compat aliases used elsewhere in the app.
     f.beat = f.bassHit;
     f.snare = f.midHit;

@@ -32,6 +32,8 @@ export const deezer = {
   top: (artistId, limit = 5) => jsonp(`/artist/${artistId}/top`, { limit }).then((r) => r.data || []),
   album: (albumId) => jsonp(`/album/${albumId}`),
   chart: (limit = 20) => jsonp('/chart/0/tracks', { limit }).then((r) => r.data || []),
+  // Preview URLs are signed and expire, so fetch a fresh one right before playing.
+  track: (id) => jsonp(`/track/${id}`),
 };
 
 export function fromDeezerTrack(t) {

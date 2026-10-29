@@ -84,16 +84,23 @@ tabs.forEach((t) => t.addEventListener('click', () => switchView(t.dataset.tab))
 
 /* ---------------- Live: mic / file ---------------- */
 const micBtn = $('#micBtn');
+const tabBtn = $('#tabBtn');
+const LISTENING = ['mic', 'tab'];   // sources that can be identified / auto-recorded
+function syncSourceUI() {
+  micBtn.classList.toggle('live', engine.mode === 'mic');
+  tabBtn.classList.toggle('on', engine.mode === 'tab');
+  if (!LISTENING.includes(engine.mode)) stopAuto();
+}
+
 micBtn.addEventListener('click', async () => {
   if (engine.mode === 'mic') {
     engine.stop();
-    micBtn.classList.remove('live');
-    stopAuto();
+    syncSourceUI();
     return;
   }
   try {
     await engine.startMic();
-    micBtn.classList.add('live');
+    syncSourceUI();
     toast('マイクで聴いています。他のアプリで音楽を流してください');
     if (store.get().settings.autoListen) startAuto();
   } catch (e) {
@@ -103,13 +110,49 @@ micBtn.addEventListener('click', async () => {
   }
 });
 
+// PC only: listen to what another app or tab is playing, via screen/tab sharing with
+// audio (Chrome, Edge, Brave). Works with headphones since nothing goes through the mic.
+const isPhone = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+tabBtn.hidden = isPhone || !navigator.mediaDevices?.getDisplayMedia;
+tabBtn.addEventListener('click', async () => {
+  if (engine.mode === 'tab') { engine.stop(); syncSourceUI(); return; }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,   // browsers require video to be requested; it's dropped right away
+      audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, suppressLocalAudioPlayback: false },
+      systemAudio: 'include',
+      selfBrowserSurface: 'exclude',
+      surfaceSwitching: 'include',
+    });
+  } catch (e) {
+    toast(e?.name === 'NotAllowedError' || e?.name === 'AbortError'
+      ? '共有がキャンセルされました'
+      : 'このブラウザでは PC の音を取り込めませんでした。Chrome / Edge / Brave でお試しください', 6000);
+    return;
+  }
+  const audio = stream.getAudioTracks();
+  stream.getVideoTracks().forEach((t) => t.stop());
+  if (!audio.length) {
+    toast('音声が共有されていません。共有画面で「タブの音声を共有」（画面全体ならシステム音声）をオンにしてください', 7000);
+    return;
+  }
+  engine.startStream(new MediaStream(audio), 'tab');
+  // Sharing ended from the browser's own "stop sharing" bar.
+  audio[0].addEventListener('ended', () => { if (engine.mode === 'tab') { engine.stop(); syncSourceUI(); toast('PC の音の共有を終了しました'); } });
+  syncSourceUI();
+  setNow({ title: 'PC で再生中の音', artist: '共有したタブ・画面の音で動いています', cover: '' }, 'Listening');
+  toast('PC の音で動かしています。イヤホンで聴いていても反応します');
+  if (store.get().settings.autoListen) startAuto();
+});
+
 $('#fileBtn').addEventListener('click', () => $('#fileInput').click());
 $('#fileInput').addEventListener('change', (e) => {
   const file = e.target.files[0];
   if (!file) return;
   stopAuto();
   engine.startFile(file);
-  micBtn.classList.remove('live');
+  syncSourceUI();
   setNow({ title: file.name.replace(/\.[^.]+$/, ''), artist: 'ローカルファイル', cover: '' }, 'Visualizing');
   e.target.value = '';
 });
@@ -130,7 +173,7 @@ let lastCapture = null;
 async function captureCurrentSong({ silent = false } = {}) {
   if (identifying) return;
   const { auddToken } = store.get().settings;
-  if (engine.mode !== 'mic') { if (!silent) toast('まずマイクをオンにしてください'); return; }
+  if (!LISTENING.includes(engine.mode)) { if (!silent) toast('まずマイク（PC では PC の音）をオンにしてください'); return; }
   if (!auddToken) { if (!silent) { toast('設定で曲認識トークンを入力してください'); openSheet('#settingsSheet'); } return; }
   if (engine.f.level < 0.03) { if (!silent) toast('音が小さすぎます'); return; }
 
@@ -178,7 +221,7 @@ autoBox.addEventListener('change', () => {
   store.update((s) => (s.settings.autoListen = autoBox.checked));
   if (autoBox.checked) {
     if (!store.get().settings.auddToken) { toast('自動記録には曲認識トークンが必要です'); openSheet('#settingsSheet'); }
-    if (engine.mode === 'mic') startAuto();
+    if (LISTENING.includes(engine.mode)) startAuto();
     else toast('マイクをオンにすると自動で記録を始めます');
   } else stopAuto();
 });
@@ -281,8 +324,9 @@ function buildCarousel() {
   el.dataset.radius = radius;
   el.dataset.step = step;
   focusIdx = Math.min(focusIdx, n - 1);
-  rot = -focusIdx * step;
-  applyRot(false);
+  rot = rotTarget = -focusIdx * step;
+  rotVel = 0;
+  applyRot();
   el.querySelectorAll('.card').forEach((c) => c.addEventListener('click', () => {
     if (dragMoved) return;
     const i = +c.dataset.i;
@@ -291,27 +335,51 @@ function buildCarousel() {
   }));
 }
 
-function applyRot(animate = true) {
+function applyRot() {
   const el = $('#carousel');
   const radius = +el.dataset.radius || 0;
-  el.style.transition = animate ? 'transform .7s cubic-bezier(.2,.8,.2,1)' : 'none';
   el.style.transform = `translateZ(${-radius}px) rotateY(${rot}deg)`;
   const n = weekTracks.length;
   const step = +el.dataset.step;
   const idx = ((Math.round(-rot / step) % n) + n) % n;
-  el.querySelectorAll('.card').forEach((c) => c.classList.toggle('focus', +c.dataset.i === idx));
-  if (idx !== focusIdx || $('#focusPanel').hidden) { focusIdx = idx; updateFocus(); }
+  if (idx !== focusIdx || $('#focusPanel').hidden) {
+    el.querySelectorAll('.card').forEach((c) => c.classList.toggle('focus', +c.dataset.i === idx));
+    focusIdx = idx;
+    updateFocus();
+  }
+}
+
+// Ring physics: the ring follows the finger 1:1 while dragging, keeps the flick's
+// momentum on release, and settles on a card with a critically damped spring.
+let rotTarget = 0, rotVel = 0, rotAnim = 0, rotLastT = 0;
+function animateRing() {
+  if (rotAnim) return;
+  rotLastT = performance.now();
+  const tick = (now) => {
+    const dt = Math.min(0.033, (now - rotLastT) / 1000);
+    rotLastT = now;
+    if (!dragStart) {
+      const k = 200, c = 2 * Math.sqrt(k);     // stiffness, critical damping
+      rotVel += (k * (rotTarget - rot) - c * rotVel) * dt;
+      rot += rotVel * dt;
+      if (Math.abs(rotTarget - rot) < 0.02 && Math.abs(rotVel) < 0.5) { rot = rotTarget; rotVel = 0; }
+    }
+    applyRot();
+    if (dragStart || rot !== rotTarget) rotAnim = requestAnimationFrame(tick);
+    else rotAnim = 0;
+  };
+  rotAnim = requestAnimationFrame(tick);
 }
 
 function snapTo(i) {
   const n = weekTracks.length;
   const step = 360 / n;
   // Shortest way round the ring.
-  const cur = Math.round(-rot / step);
+  const cur = Math.round(-rotTarget / step);
   let delta = ((i - cur) % n + n) % n;
   if (delta > n / 2) delta -= n;
-  rot = -(cur + delta) * step;
-  applyRot(true);
+  rotTarget = -(cur + delta) * step;
+  animateRing();
 }
 
 function updateFocus() {
@@ -331,20 +399,50 @@ function updateFocus() {
   $('#openYoutube').href = `https://music.youtube.com/search?q=${q}`;
   if (!audioEl.paused && audioEl.dataset.id !== String(t.deezerId)) stopPreview();
   $('#previewBtn').textContent = !audioEl.paused ? '❚❚ 停止' : '▶︎ 試聴';
-  $('#previewBtn').disabled = !t.preview;
+  $('#previewBtn').disabled = !t.deezerId;
 }
+
+// A few ms of silence. Playing it inside the tap unlocks the element on iOS, so the
+// real preview can start after the fresh URL arrives asynchronously.
+const SILENCE = (() => {
+  const n = 400;                                   // 50 ms at 8 kHz, 16-bit mono
+  const buf = new DataView(new ArrayBuffer(44 + n * 2));
+  const str = (o, t) => [...t].forEach((ch, i) => buf.setUint8(o + i, ch.charCodeAt(0)));
+  str(0, 'RIFF'); buf.setUint32(4, 36 + n * 2, true); str(8, 'WAVEfmt ');
+  buf.setUint32(16, 16, true); buf.setUint16(20, 1, true); buf.setUint16(22, 1, true);
+  buf.setUint32(24, 8000, true); buf.setUint32(28, 16000, true); buf.setUint16(32, 2, true); buf.setUint16(34, 16, true);
+  str(36, 'data'); buf.setUint32(40, n * 2, true);
+  return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+})();
+let previewReq = 0;
 
 function togglePreview() {
   const t = weekTracks[focusIdx];
-  if (!t?.preview) return;
+  if (!t?.deezerId) return;
   if (!audioEl.paused && audioEl.dataset.id === String(t.deezerId)) { stopPreview(); return; }
-  audioEl.src = t.preview;
+  const req = ++previewReq;
+  audioEl.src = SILENCE;
+  audioEl.play().catch(() => {});
   audioEl.dataset.id = t.deezerId;
-  audioEl.play().catch(() => toast('試聴を再生できませんでした'));
-  $('#previewBtn').textContent = '❚❚ 停止';
+  $('#previewBtn').textContent = '読み込み中…';
   document.querySelectorAll('.card').forEach((c) => c.classList.toggle('playing', +c.dataset.i === focusIdx));
+  // Deezer preview links are signed and expire, so stored ones stop working; get a fresh one.
+  deezer.track(t.deezerId)
+    .then((d) => {
+      if (req !== previewReq) return;
+      if (!d.preview) throw new Error('no preview');
+      t.preview = d.preview;
+      audioEl.src = d.preview;
+      return audioEl.play().then(() => { if (req === previewReq) $('#previewBtn').textContent = '❚❚ 停止'; });
+    })
+    .catch(() => {
+      if (req !== previewReq) return;
+      stopPreview();
+      toast('この曲は試聴できませんでした');
+    });
 }
 function stopPreview() {
+  previewReq++;
   audioEl.pause();
   $('#previewBtn').textContent = '▶︎ 試聴';
   document.querySelectorAll('.card.playing').forEach((c) => c.classList.remove('playing'));
@@ -383,31 +481,49 @@ $('#regenBtn').addEventListener('click', async () => {
 });
 
 // Drag / swipe to spin the ring.
+const DEG_PER_PX = 0.3;
 let dragStart = null, dragMoved = false;
 const wrap = document.querySelector('.carousel-wrap');
 wrap.addEventListener('pointerdown', (e) => {
   if (!weekTracks.length) return;
-  dragStart = { x: e.clientX, rot };
+  dragStart = { x: e.clientX, rot, lastX: e.clientX, lastT: performance.now() };
   dragMoved = false;
+  rotVel = 0;
 });
 window.addEventListener('pointermove', (e) => {
   if (!dragStart) return;
   const dx = e.clientX - dragStart.x;
-  if (Math.abs(dx) > 6) dragMoved = true;
+  if (!dragMoved && Math.abs(dx) > 6) {
+    dragMoved = true;
+    try { wrap.setPointerCapture(e.pointerId); } catch {}
+    animateRing();
+  }
   if (!dragMoved) return;
-  rot = dragStart.rot + dx * 0.28;
-  applyRot(false);
+  const now = performance.now();
+  const dt = Math.max(1, now - dragStart.lastT);
+  // Smoothed finger velocity in deg/s for the flick.
+  rotVel = rotVel * 0.6 + (((e.clientX - dragStart.lastX) * DEG_PER_PX) / dt) * 1000 * 0.4;
+  dragStart.lastX = e.clientX; dragStart.lastT = now;
+  rot = dragStart.rot + dx * DEG_PER_PX;
+  rotTarget = rot;
 });
-window.addEventListener('pointerup', () => {
+function endDrag() {
   if (!dragStart) return;
+  const wasDrag = dragMoved;
+  // Ignore stale velocity if the finger rested before lifting.
+  if (performance.now() - dragStart.lastT > 120) rotVel = 0;
   dragStart = null;
-  if (dragMoved) {
+  if (wasDrag) {
     const step = 360 / weekTracks.length;
-    rot = Math.round(rot / step) * step;
-    applyRot(true);
+    // Project where the flick would coast to, then land on the nearest card.
+    const projected = rot + rotVel * 0.22;
+    rotTarget = Math.round(projected / step) * step;
+    animateRing();
     setTimeout(() => (dragMoved = false), 50);
   }
-});
+}
+window.addEventListener('pointerup', endDrag);
+window.addEventListener('pointercancel', endDrag);
 
 function renderPastWeeks() {
   const s = store.get();
