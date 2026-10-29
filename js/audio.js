@@ -16,6 +16,7 @@ export class AudioEngine {
     this.f = { bass: 0, mid: 0, treble: 0, level: 0, centroid: 0, beat: 0, snare: 0, bpm: 0, beatCount: 0 };
     this.sensitivity = 1.5;   // 0.5 (calm) .. 3 (very reactive)
     this._peak = { bass: 0.05, mid: 0.05, treble: 0.05 };
+    this._floor = { bass: 0, mid: 0, treble: 0 };   // running average level per band
     this._prevLow = null;
     this._prevHigh = null;
     this._flux = [];          // recent kick onset strengths
@@ -71,6 +72,7 @@ export class AudioEngine {
   stop() {
     this._prevLow = this._prevHigh = null;
     this._flux = []; this._fluxHi = [];
+    this._floor = { bass: 0, mid: 0, treble: 0 };
     if (this.source) { try { this.source.disconnect(); } catch {} this.source = null; }
     if (this.analyser) { try { this.analyser.disconnect(); } catch {} }
     if (this.stream) { this.stream.getTracks().forEach((t) => t.stop()); this.stream = null; }
@@ -115,12 +117,19 @@ export class AudioEngine {
     // Auto gain: each band is measured against its own recent peak, so a phone
     // mic across the room moves the scene as much as a loud speaker does.
     const sens = this.sensitivity;
+    // Contrast: recorded music is mastered to stay loud, so measuring against the
+    // peak alone keeps everything near max. Measuring how far the sound rises
+    // above its own recent average makes hits stand out like a finger snap does.
     const gain = (band, raw) => {
-      const pk = this._peak;
+      const pk = this._peak, fl = this._floor;
       pk[band] = Math.max(raw, pk[band] * 0.997, 0.03);
+      fl[band] += (raw - fl[band]) * 0.025;               // ~0.7 s average
       const gate = Math.min(1, raw / 0.015);              // stay calm in silence
-      const n = Math.pow(raw / pk[band], 2.2 - sens * 0.4); // >1 exponent = punchier peaks
-      return Math.min(1, n * (0.55 + sens * 0.3) * gate);
+      const base = fl[band] * 0.92;
+      const rise = Math.max(0, raw - base) / Math.max(pk[band] - base, 0.008);
+      const abs = raw / pk[band];
+      const n = Math.pow(Math.min(1, rise * 0.8 + abs * 0.2), 2.0 - sens * 0.4);
+      return Math.min(1, n * (0.6 + sens * 0.3) * gate);
     };
     const nb = gain('bass', bass), nm = gain('mid', mid), nt = gain('treble', treble);
     const nl = nb * 0.45 + nm * 0.4 + nt * 0.15;
