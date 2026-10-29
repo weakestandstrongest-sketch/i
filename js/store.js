@@ -8,7 +8,7 @@ const empty = () => ({
   liked: [],          // deezer track ids
   heard: [],          // deezer track ids marked "already heard" from recommendations
   ytLikes: [],        // { videoId, title, artist, artistId, cover, genres[], deezerId } liked on YouTube Music
-  settings: { auddToken: '', autoListen: false, autoInterval: 45, lastfmUser: '', lastfmKey: '', lastfmCursor: 0, lastfmSyncedAt: 0, googleClientId: '', ytSyncedAt: 0, sensitivity: 1.5 },
+  settings: { auddToken: '', autoListen: false, autoInterval: 45, lastfmUser: '', lastfmKey: '', lastfmCursor: 0, lastfmSyncedAt: 0, googleClientId: '', ytSyncedAt: 0, sensitivity: 1.5, sensBass: 1, sensMid: 1, sensTreble: 1, showMeter: false },
 });
 
 let state = load();

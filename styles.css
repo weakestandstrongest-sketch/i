@@ -279,6 +279,23 @@ body.dim-stage #stage { filter: blur(26px) saturate(1.4); opacity: 0.55; }
 .field input:focus { border-color: var(--accent); }
 .field input[type="range"] { padding: 0; height: 28px; border: 0; background: none; accent-color: var(--g2); -webkit-appearance: auto; appearance: auto; }
 #sensValue { color: var(--fg); font-variant-numeric: tabular-nums; margin-left: 4px; }
+.band-sens { display: grid; grid-template-columns: 1fr; gap: 2px; margin-top: 12px; }
+.band-sens label { display: flex; align-items: baseline; gap: 6px; margin: 6px 0 0; }
+.band-sens label span { color: var(--fg); font-variant-numeric: tabular-nums; }
+.band-sens label small { margin-left: auto; color: var(--fg-faint); font-size: 11px; }
+.check-row { display: flex !important; align-items: center; gap: 8px; margin-top: 14px; font-size: 14px; color: var(--fg-dim); }
+.check-row input { width: 18px !important; height: 18px; padding: 0 !important; accent-color: var(--g2); -webkit-appearance: auto !important; appearance: auto !important; }
+
+/* Band meter: three bars that flash on each band's onsets */
+.band-meter { position: absolute; right: 16px; top: calc(var(--safe-t) + 150px); display: flex; gap: 8px; padding: 10px 12px; border-radius: 16px; pointer-events: none; }
+.bm { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.bm i { display: block; width: 10px; height: 70px; border-radius: 5px; background: rgba(255,255,255,.12); position: relative; overflow: hidden; }
+.bm i::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: calc(var(--v, 0) * 100%); border-radius: 5px; background: var(--c); }
+.bm b { font-size: 11px; font-weight: 600; color: var(--fg-dim); transition: color .08s; }
+.bm.hit b { color: #fff; text-shadow: 0 0 8px var(--c); }
+.bm[data-b="bass"] { --c: #ff6a3d; }
+.bm[data-b="mid"] { --c: #8b3dff; }
+.bm[data-b="treble"] { --c: #bff4ff; }
 .hint { margin: 8px 0 0; font-size: 12px; line-height: 1.5; color: var(--fg-faint); }
 .btn-col { display: flex; flex-direction: column; gap: 8px; }
 .btn-col .btn-glass { text-align: left; border-radius: 14px; }

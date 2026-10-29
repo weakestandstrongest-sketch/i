@@ -12,6 +12,10 @@ const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '
 
 const engine = new AudioEngine();
 engine.sensitivity = store.get().settings.sensitivity ?? 1.5;
+{
+  const st = store.get().settings;
+  engine.bandSens = { bass: st.sensBass ?? 1, mid: st.sensMid ?? 1, treble: st.sensTreble ?? 1 };
+}
 let viz = null;
 try { viz = new Visualizer($('#stage')); } catch (e) { console.error(e); }
 
@@ -23,12 +27,13 @@ setInterval(() => engine.update(performance.now()), 16);
 
 function loop(t) {
   const f = engine.f;
-  viz?.render(t, f, engine.mode === 'idle' ? null : engine.freq);
+  viz?.render(t, f, engine.mode === 'idle' ? null : engine.freq, engine.ctx ? engine.ctx.sampleRate / 2 : 24000);
   if (++frameN % 6 === 0 && currentView === 'live') {
     $('#bpmValue').textContent = f.bpm ? Math.round(f.bpm) : '--';
     $('#energyValue').textContent = Math.round(f.level * 100);
     $('#brightValue').textContent = Math.round(f.centroid * 100);
   }
+  if (meterOn && frameN % 2 === 0) updateMeter(f);
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
@@ -60,6 +65,7 @@ function switchView(name) {
   const i = tabs.findIndex((t) => t.dataset.tab === name);
   $('#tabIndicator').style.transform = `translateX(${i * 88}px)`;
   document.body.classList.toggle('dim-stage', name !== 'live');
+  viz?.setLowPower(name !== 'live');
   if (name === 'discover') renderDiscover();
   if (name === 'you') renderYou();
 }
@@ -742,6 +748,11 @@ $('#openSettings').addEventListener('click', () => {
   $('#googleClientId').value = st.googleClientId;
   $('#sensitivity').value = String(st.sensitivity ?? 1.5);
   $('#sensValue').textContent = Number(st.sensitivity ?? 1.5).toFixed(1);
+  for (const id of ['sensBass', 'sensMid', 'sensTreble']) {
+    $('#' + id).value = String(st[id] ?? 1);
+    $('#' + id + 'Value').textContent = Number(st[id] ?? 1).toFixed(1);
+  }
+  $('#showMeter').checked = !!st.showMeter;
   showLastfmStatus();
   showYtStatus();
   preloadGoogle();
@@ -758,6 +769,32 @@ $('#closeSettings').addEventListener('click', () => {
   closeSheets();
   syncLastfm();
 });
+// Band meter: sustained level as bar height, onsets light up the label.
+let meterOn = !!store.get().settings.showMeter;
+const meterEls = {};
+document.querySelectorAll('.bm').forEach((el) => (meterEls[el.dataset.b] = el));
+$('#bandMeter').hidden = !meterOn;
+function updateMeter(f) {
+  for (const b of ['bass', 'mid', 'treble']) {
+    const el = meterEls[b];
+    el.style.setProperty('--v', f[b].toFixed(3));
+    el.classList.toggle('hit', f[b + 'Hit'] > 0.35);
+  }
+}
+$('#showMeter').addEventListener('change', (e) => {
+  meterOn = e.target.checked;
+  $('#bandMeter').hidden = !meterOn;
+  store.update((s) => (s.settings.showMeter = meterOn));
+});
+for (const [id, key, band] of [['sensBass', 'sensBass', 'bass'], ['sensMid', 'sensMid', 'mid'], ['sensTreble', 'sensTreble', 'treble']]) {
+  $('#' + id).addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    engine.bandSens[band] = v;
+    $('#' + id + 'Value').textContent = v.toFixed(1);
+    store.update((s) => (s.settings[key] = v));
+  });
+}
+
 // Applies live so you can tune it while music plays.
 $('#sensitivity').addEventListener('input', (e) => {
   const v = Number(e.target.value);

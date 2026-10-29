@@ -80,6 +80,11 @@
       </label>
       <input type="file" id="fileInput" accept="audio/*" hidden />
     </div>
+    <div class="band-meter glass" id="bandMeter" hidden aria-hidden="true">
+      <div class="bm" data-b="bass"><i></i><b>低</b></div>
+      <div class="bm" data-b="mid"><i></i><b>中</b></div>
+      <div class="bm" data-b="treble"><i></i><b>高</b></div>
+    </div>
   </section>
 
   <!-- DISCOVER -->
@@ -174,6 +179,15 @@
       <label for="sensitivity">ビジュアライザーの感度 <span id="sensValue"></span></label>
       <input id="sensitivity" type="range" min="0.5" max="3" step="0.1" />
       <p class="hint">音が小さい・離れた場所で鳴っているときは高めに。動きすぎるときは低めに。</p>
+      <div class="band-sens">
+        <label for="sensBass">低音 <span id="sensBassValue"></span><small>球体・衝撃波</small></label>
+        <input id="sensBass" type="range" min="0.3" max="2" step="0.1" />
+        <label for="sensMid">中音 <span id="sensMidValue"></span><small>パネル・波紋</small></label>
+        <input id="sensMid" type="range" min="0.3" max="2" step="0.1" />
+        <label for="sensTreble">高音 <span id="sensTrebleValue"></span><small>針・火花・星</small></label>
+        <input id="sensTreble" type="range" min="0.3" max="2" step="0.1" />
+      </div>
+      <label class="check-row"><input type="checkbox" id="showMeter" /> 帯域メーターを表示（反応の確認用）</label>
     </div>
 
     <div class="field">
