@@ -400,6 +400,7 @@ function updateFocus() {
   if (!audioEl.paused && audioEl.dataset.id !== String(t.deezerId)) stopPreview();
   $('#previewBtn').textContent = !audioEl.paused ? '❚❚ 停止' : '▶︎ 試聴';
   $('#previewBtn').disabled = !t.deezerId;
+  prefetchPreview();
 }
 
 // A few ms of silence. Playing it inside the tap unlocks the element on iOS, so the
@@ -415,39 +416,101 @@ const SILENCE = (() => {
   return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
 })();
 let previewReq = 0;
+const PREVIEW_TTL = 4 * 60 * 1000;   // Deezer's signed preview links expire; refresh well before
+
+// Fresh, playable preview link for a track. Falls back to another release of the same
+// song when Deezer has no preview for this one (some tracks are licensed without one).
+const previewCache = new Map();   // deezerId -> { url, at } | { pending }
+function fetchPreview(t) {
+  const hit = previewCache.get(t.deezerId);
+  if (hit?.url && Date.now() - hit.at < PREVIEW_TTL) return Promise.resolve(hit.url);
+  if (hit?.pending) return hit.pending;
+  const pending = deezer.track(t.deezerId)
+    .then((d) => d.preview || deezer.searchTracks(`artist:"${t.artist}" track:"${t.title}"`, 5)
+      .then((list) => list.find((x) => x.preview)?.preview || ''))
+    .then((url) => {
+      if (!url) throw new Error('no preview');
+      previewCache.set(t.deezerId, { url, at: Date.now() });
+      return url;
+    })
+    .catch((e) => { previewCache.delete(t.deezerId); throw e; });
+  previewCache.set(t.deezerId, { pending });
+  return pending;
+}
+function freshPreview(t) {
+  const hit = previewCache.get(t.deezerId);
+  return hit?.url && Date.now() - hit.at < PREVIEW_TTL ? hit.url : null;
+}
+// Prefetch the centred card's link so a tap can start playback right inside the gesture,
+// which is what iOS allows most reliably.
+function prefetchPreview() {
+  const t = weekTracks[focusIdx];
+  if (t?.deezerId) fetchPreview(t).catch(() => {});
+}
+
+function setPlayingUI(state) {
+  $('#previewBtn').textContent = state === 'loading' ? '読み込み中…' : state === 'playing' ? '❚❚ 停止' : '▶︎ 試聴';
+  document.querySelectorAll('.card').forEach((c) => c.classList.toggle('playing', state !== 'idle' && +c.dataset.i === focusIdx));
+}
+
+function startAudio(url, req, t, retried = false) {
+  audioEl.dataset.phase = 'play';
+  audioEl.src = url;
+  return audioEl.play()
+    .then(() => { if (req === previewReq) setPlayingUI('playing'); })
+    .catch((e) => {
+      if (req !== previewReq) return;
+      if (e?.name === 'NotAllowedError') {
+        // The browser wanted a fresh tap; the link is cached now, so the next tap plays at once.
+        setPlayingUI('idle');
+        toast('もう一度タップすると再生します');
+        return;
+      }
+      if (retried) throw e;
+      previewCache.delete(t.deezerId);   // link may have expired: fetch a new one once
+      return fetchPreview(t).then((u) => req === previewReq && startAudio(u, req, t, true));
+    });
+}
 
 function togglePreview() {
   const t = weekTracks[focusIdx];
   if (!t?.deezerId) return;
   if (!audioEl.paused && audioEl.dataset.id === String(t.deezerId)) { stopPreview(); return; }
   const req = ++previewReq;
+  audioEl.dataset.id = t.deezerId;
+  const fail = () => {
+    if (req !== previewReq) return;
+    stopPreview();
+    toast('この曲は試聴できませんでした');
+  };
+  const ready = freshPreview(t);
+  if (ready) {
+    // Link already fetched: play directly inside the tap.
+    setPlayingUI('loading');
+    startAudio(ready, req, t).catch(fail);
+    return;
+  }
+  // No link yet: unlock the element with silence inside the tap (iOS), then fetch.
+  audioEl.dataset.phase = 'unlock';
   audioEl.src = SILENCE;
   audioEl.play().catch(() => {});
-  audioEl.dataset.id = t.deezerId;
-  $('#previewBtn').textContent = '読み込み中…';
-  document.querySelectorAll('.card').forEach((c) => c.classList.toggle('playing', +c.dataset.i === focusIdx));
-  // Deezer preview links are signed and expire, so stored ones stop working; get a fresh one.
-  deezer.track(t.deezerId)
-    .then((d) => {
-      if (req !== previewReq) return;
-      if (!d.preview) throw new Error('no preview');
-      t.preview = d.preview;
-      audioEl.src = d.preview;
-      return audioEl.play().then(() => { if (req === previewReq) $('#previewBtn').textContent = '❚❚ 停止'; });
-    })
-    .catch(() => {
-      if (req !== previewReq) return;
-      stopPreview();
-      toast('この曲は試聴できませんでした');
-    });
+  setPlayingUI('loading');
+  fetchPreview(t)
+    .then((url) => { if (req === previewReq) return startAudio(url, req, t); })
+    .catch(fail);
 }
 function stopPreview() {
   previewReq++;
+  audioEl.dataset.phase = '';
   audioEl.pause();
-  $('#previewBtn').textContent = '▶︎ 試聴';
-  document.querySelectorAll('.card.playing').forEach((c) => c.classList.remove('playing'));
+  setPlayingUI('idle');
 }
-audioEl.addEventListener('ended', stopPreview);
+// Only the real preview reaching its end resets the button. The unlock silence's own
+// 'ended' can be delivered after the source has already switched to the preview, so
+// check that the current audio really played through.
+audioEl.addEventListener('ended', () => {
+  if (audioEl.dataset.phase === 'play' && audioEl.duration > 1 && audioEl.currentTime >= audioEl.duration - 0.5) stopPreview();
+});
 $('#previewBtn').addEventListener('click', togglePreview);
 
 $('#likeBtn').addEventListener('click', () => {
